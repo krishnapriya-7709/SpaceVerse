@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CAMPAIGN_LEVELS, CampaignLevel, PlayerState, WELCOME_MESSAGES } from '../data/spaceverseData';
+import { storyTransitions } from '../data/storyTransitions';
 import { SFX } from '../utils/sfx';
 import { RecruitBadgeSVG, SatelliteBuilderBadgeSVG, SatelliteIllustrationSVG } from './BadgesSVG';
 import { SpaceCampaignMap } from './SpaceCampaignMap';
@@ -40,6 +41,7 @@ export const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ visible, onAccep
   const [mainTyped, setMainTyped] = useState('');
   const [subTyped, setSubTyped] = useState('');
   const [isTyping, setIsTyping] = useState(true);
+  const [introChoiceIdx, setIntroChoiceIdx] = useState<number | null>(null);
 
   const currentMsg = WELCOME_MESSAGES[stepIdx];
 
@@ -84,6 +86,7 @@ export const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ visible, onAccep
   if (!visible) return null;
 
   const isFinal = stepIdx === WELCOME_MESSAGES.length - 1;
+  const introStory = storyTransitions[0];
 
   const handleAction = () => {
     SFX.click();
@@ -132,6 +135,41 @@ export const WelcomeOverlay: React.FC<WelcomeOverlayProps> = ({ visible, onAccep
             <span className="text-[#4fe3d4] animate-[blinkCaret_0.8s_infinite]">▌</span>
           )}
         </p>
+
+        {isFinal && introStory && (
+          <div className="mt-4 p-3 rounded-xl bg-[#091834] border border-cyan-400/30 space-y-2">
+            <div className="flex items-center justify-between gap-2 text-[11px]">
+              <span className="font-bold text-amber-300">🎙️ {introStory.speaker}</span>
+              <span className="font-mono-tech text-[#4fe3d4] uppercase">{introStory.uiTrigger}</span>
+            </div>
+            <p className="text-xs text-slate-200 leading-snug">&ldquo;{introStory.transmissionText}&rdquo;</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {introStory.choices.map((ch, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    SFX.select();
+                    setIntroChoiceIdx(idx);
+                  }}
+                  className={`p-2 rounded-lg border text-left text-[11px] font-bold transition cursor-pointer ${
+                    introChoiceIdx === idx
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                      : 'bg-[#061124] border-white/15 hover:border-cyan-400/60 text-slate-200'
+                  }`}
+                >
+                  {introChoiceIdx === idx ? '✓ ' : '▸ '}
+                  {ch.label}
+                </button>
+              ))}
+            </div>
+            {introChoiceIdx !== null && (
+              <div className="px-2.5 py-1.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-[11px] text-emerald-200 font-semibold">
+                {introStory.choices[introChoiceIdx].effectText}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 flex items-center justify-between gap-3">
           <span className="text-[11px] text-slate-400">
@@ -367,7 +405,16 @@ export const MissionBriefingModal: React.FC<{
   onAccept: () => void;
   onClose: () => void;
 }> = ({ level, onAccept, onClose }) => {
+  const [selectedChoiceIdx, setSelectedChoiceIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    setSelectedChoiceIdx(null);
+  }, [level?.lvl]);
+
   if (!level) return null;
+
+  const story = storyTransitions.find((s) => s.id === `level_${level.lvl}`);
+  const activeChoice = selectedChoiceIdx !== null && story ? story.choices[selectedChoiceIdx] : null;
 
   return (
     <div
@@ -379,7 +426,7 @@ export const MissionBriefingModal: React.FC<{
       }}
       className="fixed inset-0 z-[2200] bg-black/82 flex items-center justify-center p-4"
     >
-      <div className="w-full max-w-xl rounded-2xl bg-[#07142b] border border-cyan-400/50 p-6 md:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.88)] animate-[popIn_0.25s_ease-out]">
+      <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl bg-[#07142b] border border-cyan-400/50 p-6 md:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.88)] animate-[popIn_0.25s_ease-out]">
         <div className="flex items-center justify-between gap-2">
           <span className="px-2.5 py-0.5 rounded bg-amber-400/15 border border-amber-400/40 text-amber-300 text-[10px] font-mono-tech font-bold uppercase tracking-wider">
             📍 {level.briefingStationName}
@@ -403,6 +450,50 @@ export const MissionBriefingModal: React.FC<{
           <span>{level.icon}</span>
           <span>{level.title}</span>
         </h2>
+
+        {story && (
+          <div className="mt-3 p-3.5 rounded-xl bg-[#091834] border border-cyan-400/35 space-y-2.5">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-xs font-extrabold text-amber-300">
+                🎙️ {story.speaker}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-cyan-400/15 border border-cyan-400/40 text-[10px] font-mono-tech font-bold text-[#4fe3d4] uppercase">
+                {story.uiTrigger}
+              </span>
+            </div>
+            <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+              &ldquo;{story.transmissionText}&rdquo;
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {story.choices.map((ch, cIdx) => {
+                const isChosen = selectedChoiceIdx === cIdx;
+                return (
+                  <button
+                    key={cIdx}
+                    type="button"
+                    onClick={() => {
+                      SFX.select();
+                      setSelectedChoiceIdx(cIdx);
+                    }}
+                    className={`p-2.5 rounded-lg border text-left text-xs font-bold transition cursor-pointer ${
+                      isChosen
+                        ? 'bg-emerald-500/20 border-emerald-400 text-emerald-100'
+                        : 'bg-[#061124] border-white/15 hover:border-cyan-400/60 text-slate-200'
+                    }`}
+                  >
+                    {isChosen ? '✓ ' : '▸ '}
+                    {ch.label}
+                  </button>
+                );
+              })}
+            </div>
+            {activeChoice && (
+              <div className="px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-[11px] font-semibold text-emerald-200">
+                {activeChoice.effectText}
+              </div>
+            )}
+          </div>
+        )}
 
         {level.isLab && (
           <div className="mt-3 p-3.5 rounded-xl bg-[#050e20] border border-cyan-400/30 flex items-center gap-4">

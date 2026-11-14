@@ -145,15 +145,8 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<{ text: string; until: number }>({ text: '', until: 0 });
   const [muted, setMuted] = useState<boolean>(() => SFX.isMuted());
 
-  const [viewMode, setViewMode] = useState<'upper' | 'high' | 'eye'>('upper');
-  const viewModeRef = useRef<'upper' | 'high' | 'eye'>('upper');
-  viewModeRef.current = viewMode;
-  const VIEW_HEIGHTS: Record<'upper' | 'high' | 'eye', number> = {
-    upper: 3.6,
-    high: 5.0,
-    eye: 2.1,
-  };
-  const camYRef = useRef<number>(3.6);
+  const UPPER_VIEW_HEIGHT = 3.6;
+  const camYRef = useRef<number>(UPPER_VIEW_HEIGHT);
 
   // Mutable Simulation Refs
   const playerPosRef = useRef<{ x: number; z: number }>({ x: -2, z: 12 });
@@ -402,7 +395,7 @@ export default function App() {
       if (!loc) return;
       SFX.navigate();
       playerPosRef.current = { x: loc.target.x, z: loc.target.z };
-      const defaultPitch = viewModeRef.current === 'eye' ? -0.02 : -0.11;
+      const defaultPitch = -0.11;
       lookRef.current = { yaw: loc.yaw, pitch: defaultPitch };
       if (cameraRef.current) {
         cameraRef.current.position.set(loc.target.x, camYRef.current, loc.target.z);
@@ -431,21 +424,6 @@ export default function App() {
     },
     [say]
   );
-
-  const cycleViewMode = useCallback(() => {
-    SFX.click();
-    setViewMode((prev) => {
-      const next = prev === 'upper' ? 'high' : prev === 'high' ? 'eye' : 'upper';
-      const label =
-        next === 'upper'
-          ? 'Upper View (3.6m)'
-          : next === 'high'
-          ? 'Tactical Hover View (5.0m)'
-          : 'Eye-Level View (2.1m)';
-      say(`Camera Elevation: ${label}`, 2400);
-      return next;
-    });
-  }, [say]);
 
   // ========================================================
   // GAMEPLAY ACTIONS (CRATES, PAD LOAD, LAUNCH, MCC)
@@ -1374,9 +1352,6 @@ export default function App() {
       if (k === 'c' && startedRef.current) {
         setShowCampaignModal((v) => !v);
       }
-      if (k === 'v' && startedRef.current) {
-        cycleViewMode();
-      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1529,7 +1504,7 @@ export default function App() {
         P.x = Math.max(-53, Math.min(53, P.x));
         P.z = Math.max(-35, Math.min(19, P.z));
 
-        const targetCamY = VIEW_HEIGHTS[viewModeRef.current];
+        const targetCamY = UPPER_VIEW_HEIGHT;
         camYRef.current += (targetCamY - camYRef.current) * Math.min(1, dt * 10);
         cam.position.set(P.x, camYRef.current, P.z);
         cam.rotation.order = 'YXZ';
@@ -1666,7 +1641,7 @@ export default function App() {
         container.removeChild(ren.domElement);
       }
     };
-  }, [closeMap, completeTutTask, cycleViewMode, initiateLaunch, loadRocketOnPad, openMap, say, syncCrateColors, syncWithServer, takeCrate, updatePlayer]);
+  }, [closeMap, completeTutTask, initiateLaunch, loadRocketOnPad, openMap, say, syncCrateColors, syncWithServer, takeCrate, updatePlayer]);
 
   // Derived HUD metrics
   const activeMission = CAMPAIGN_LEVELS[activeLevelIdx] || CAMPAIGN_LEVELS[0];
@@ -1976,18 +1951,10 @@ export default function App() {
         <>
           <div className="fixed bottom-3 left-3 z-20 hidden sm:block px-3 py-1.5 rounded-lg bg-[#071022]/85 border border-white/10 text-[11px] text-slate-400">
             WASD Move • Drag Look • Click 3D Objects or press <kbd className="text-[#4fe3d4]">E</kbd> • Map{' '}
-            <kbd className="text-[#4fe3d4]">M</kbd> • View <kbd className="text-[#4fe3d4]">V</kbd>
+            <kbd className="text-[#4fe3d4]">M</kbd>
           </div>
 
           <div className="fixed bottom-3 right-3 z-20 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={cycleViewMode}
-              title="Cycle Camera Elevation [V]"
-              className="px-3 py-2 rounded-xl bg-[#071124]/88 border border-cyan-400/30 hover:border-cyan-400/60 text-xs font-bold text-cyan-200 transition cursor-pointer"
-            >
-              👁 {viewMode === 'upper' ? 'Upper View' : viewMode === 'high' ? 'High Hover' : 'Eye Level'}
-            </button>
             <button
               onClick={() => {
                 if (started && !isFlying && currentInteractRef.current) {
