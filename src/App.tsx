@@ -5,13 +5,14 @@ import {
   CAMPAIGN_LEVELS,
   CampaignLevel,
   CRATES,
+  DEFAULT_LEVEL1_PROGRESS,
   FacilityLocation,
   getCurrentLocation,
   getSavedUserId,
+  Level1Progress,
   loadPlayerData,
   LOCATIONS,
   PlayerState,
-  SatSubsystemId,
   savePlayerData,
   SupplyCrate,
 } from './data/spaceverseData';
@@ -31,7 +32,7 @@ import {
 } from './three/facilityModels';
 import { makeFloorTexture, makeHangarFloorTexture } from './three/proceduralTextures';
 import { SFX } from './utils/sfx';
-import { FacilityMap } from './components/FacilityMap';
+import { FacilityMap, MapMissionTarget } from './components/FacilityMap';
 import {
   CampaignDirectoryModal,
   ExplorerDossierModal,
@@ -45,7 +46,11 @@ import {
   TutorialTaskModal,
   WelcomeOverlay,
 } from './components/Modals';
-import { Level1RewardResult, SatelliteAssemblyLab } from './components/SatelliteAssemblyLab';
+import {
+  Level1CompletionPayload,
+  Level1RewardResult,
+  SatelliteAssemblyLab,
+} from './components/SatelliteAssemblyLab';
 
 interface InteractableZone {
   x: number;
@@ -140,9 +145,20 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<{ text: string; until: number }>({ text: '', until: 0 });
   const [muted, setMuted] = useState<boolean>(() => SFX.isMuted());
 
+  const [viewMode, setViewMode] = useState<'upper' | 'high' | 'eye'>('upper');
+  const viewModeRef = useRef<'upper' | 'high' | 'eye'>('upper');
+  viewModeRef.current = viewMode;
+  const VIEW_HEIGHTS: Record<'upper' | 'high' | 'eye', number> = {
+    upper: 3.6,
+    high: 5.0,
+    eye: 2.1,
+  };
+  const camYRef = useRef<number>(3.6);
+
   // Mutable Simulation Refs
   const playerPosRef = useRef<{ x: number; z: number }>({ x: -2, z: 12 });
-  const lookRef = useRef<{ yaw: number; pitch: number }>({ yaw: Math.PI, pitch: 0 });
+  const lookRef = useRef<{ yaw: number; pitch: number }>({ yaw: Math.PI, pitch: -0.11 });
+  const missionTargetRef = useRef<MapMissionTarget | null>(null);
   const simRef = useRef<{
     n: number;
     phase: number;
@@ -386,9 +402,10 @@ export default function App() {
       if (!loc) return;
       SFX.navigate();
       playerPosRef.current = { x: loc.target.x, z: loc.target.z };
-      lookRef.current = { yaw: loc.yaw, pitch: 0 };
+      const defaultPitch = viewModeRef.current === 'eye' ? -0.02 : -0.11;
+      lookRef.current = { yaw: loc.yaw, pitch: defaultPitch };
       if (cameraRef.current) {
-        cameraRef.current.position.set(loc.target.x, 1.7, loc.target.z);
+        cameraRef.current.position.set(loc.target.x, camYRef.current, loc.target.z);
       }
       setCurrentLoc(loc);
       setMapExpanded(false);
@@ -405,7 +422,7 @@ export default function App() {
       SFX.navigate();
       playerPosRef.current = { x: wx, z: wz };
       if (cameraRef.current) {
-        cameraRef.current.position.set(wx, 1.7, wz);
+        cameraRef.current.position.set(wx, camYRef.current, wz);
       }
       const loc = getCurrentLocation(wx, wz);
       setCurrentLoc(loc);
@@ -414,6 +431,21 @@ export default function App() {
     },
     [say]
   );
+
+  const cycleViewMode = useCallback(() => {
+    SFX.click();
+    setViewMode((prev) => {
+      const next = prev === 'upper' ? 'high' : prev === 'high' ? 'eye' : 'upper';
+      const label =
+        next === 'upper'
+          ? 'Upper View (3.6m)'
+          : next === 'high'
+          ? 'Tactical Hover View (5.0m)'
+          : 'Eye-Level View (2.1m)';
+      say(`Camera Elevation: ${label}`, 2400);
+      return next;
+    });
+  }, [say]);
 
   // ========================================================
   // GAMEPLAY ACTIONS (CRATES, PAD LOAD, LAUNCH, MCC)
@@ -539,8 +571,42 @@ export default function App() {
     [say, syncCrateColors, syncWithServer, updatePlayer]
   );
 
+  const handleSaveLevel1Progress = useCallback(
+    (progress: Level1Progress) => {
+      updatePlayer((p) => ({
+        ...p,
+        level1Progress: progress,
+      }));
+      fetch('/api/levels/1/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: playerStateRef.current.userId,
+          progress,
+        }),
+      }).catch(() => {});
+    },
+    [updatePlayer]
+  );
+
+  const handleReplayResetLevel1 = useCallback(() => {
+    const fresh: Level1Progress = { ...DEFAULT_LEVEL1_PROGRESS };
+    updatePlayer((p) => ({
+      ...p,
+      level1Progress: fresh,
+    }));
+    fetch('/api/levels/1/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: playerStateRef.current.userId,
+        reset: true,
+      }),
+    }).catch(() => {});
+  }, [updatePlayer]);
+
   const handleCompleteLevel1 = useCallback(
-    async (installedIds: SatSubsystemId[]): Promise<Level1RewardResult> => {
+    async (payload: Level1CompletionPayload): Promise<Level1RewardResult> => {
       const current = playerStateRef.current;
       try {
         const res = await fetch('/api/levels/1/complete', {
@@ -548,7 +614,12 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: current.userId,
-            installedParts: installedIds,
+            installedSatParts: payload.installedSatParts,
+            installedRocketParts: payload.installedRocketParts,
+            stage3LaunchpadDone: payload.stage3LaunchpadDone,
+            stage4PayloadDone: payload.stage4PayloadDone,
+            stage5LaunchDone: payload.stage5LaunchDone,
+            launchStatus: payload.launchStatus,
           }),
         });
         if (res.ok) {
@@ -570,21 +641,30 @@ export default function App() {
       const rewardAwarded = firstTime ? 1000 : 0;
       const nextStarBalance = current.starCredits + rewardAwarded;
 
-      if (firstTime) {
-        updatePlayer((p) => {
-          if (p.completedLevels.includes(1)) return p;
-          return {
-            ...p,
-            starCredits: p.starCredits + 1000,
-            completedLevels: [...p.completedLevels, 1],
-            levelScores: { ...p.levelScores, 1: 1000 },
-            badges: p.badges.includes('SATELLITE_BUILDER')
-              ? p.badges
-              : [...p.badges, 'SATELLITE_BUILDER'],
-            currentCampaignLevel: Math.max(p.currentCampaignLevel, 2),
-          };
-        });
-      }
+      updatePlayer((p) => {
+        const completed = p.completedLevels.includes(1) ? p.completedLevels : [...p.completedLevels, 1];
+        return {
+          ...p,
+          starCredits: p.completedLevels.includes(1) ? p.starCredits : p.starCredits + 1000,
+          completedLevels: completed,
+          levelScores: { ...p.levelScores, 1: 1000 },
+          badges: p.badges.includes('SATELLITE_BUILDER')
+            ? p.badges
+            : [...p.badges, 'SATELLITE_BUILDER'],
+          currentCampaignLevel: Math.max(p.currentCampaignLevel, 2),
+          level1Progress: {
+            stage: 5,
+            satParts: payload.installedSatParts,
+            rocketParts: payload.installedRocketParts,
+            stage1Done: true,
+            stage2Done: true,
+            stage3Done: true,
+            stage4Done: true,
+            stage5Done: true,
+            launchStatus: 'completed',
+          },
+        };
+      });
 
       return {
         alreadyRewarded: !firstTime,
@@ -654,7 +734,7 @@ export default function App() {
     sc.fog = new THREE.FogExp2(0x0b1322, 0.0085);
 
     const cam = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1200);
-    cam.position.set(-2, 1.7, 12);
+    cam.position.set(-2, camYRef.current, 12);
     cameraRef.current = cam;
 
     const ren = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -1294,6 +1374,9 @@ export default function App() {
       if (k === 'c' && startedRef.current) {
         setShowCampaignModal((v) => !v);
       }
+      if (k === 'v' && startedRef.current) {
+        cycleViewMode();
+      }
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1345,13 +1428,19 @@ export default function App() {
       const M = CAMPAIGN_LEVELS[simRef.current.n] || CAMPAIGN_LEVELS[0];
       const s = simRef.current;
 
-      // Dynamic 3D Waypoint Beacon: Cadet Training OR Active Mission Station
+      // Dynamic 3D Waypoint Beacon & Map Mission Route Target: Cadet Training OR Active Mission Station
       if (!playerStateRef.current.trainingCompleted && tutStepRef.current > 0) {
         if (tutBeacon.visible) {
           const baseY = typeof tutBeacon.userData.baseY === 'number' ? tutBeacon.userData.baseY : 5.2;
           tutBeacon.position.y = baseY + Math.sin(now * 0.005) * 0.22;
           tutBeacon.rotation.y += 0.025;
         }
+        const step = tutStepRef.current;
+        if (step === 2) missionTargetRef.current = { x: -40, z: 10, label: 'GSC Dish' };
+        else if (step === 3) missionTargetRef.current = { x: 22, z: -6, label: 'SAH Satellite' };
+        else if (step === 4) missionTargetRef.current = { x: -9, z: -25, label: 'SRL Bench' };
+        else if (step === 5) missionTargetRef.current = { x: -34, z: -24, label: 'MCC Wall' };
+        else missionTargetRef.current = null;
       } else if (
         playerStateRef.current.trainingCompleted &&
         startedRef.current &&
@@ -1362,39 +1451,41 @@ export default function App() {
         let bx = 22;
         let by = 5.2;
         let bz = -6;
+        let targetLabel = 'SAH Briefing';
         let showBeacon = true;
 
         if (s.phase === 0) {
           if (M.briefingStationId === 'sah') {
-            bx = 22; by = 5.2; bz = -6;
+            bx = 22; by = 5.2; bz = -6; targetLabel = `SAH Briefing (L${M.lvl})`;
           } else if (M.briefingStationId === 'mcc') {
-            bx = -34; by = 6.0; bz = -24;
+            bx = -34; by = 6.0; bz = -24; targetLabel = `MCC Briefing (L${M.lvl})`;
           } else if (M.briefingStationId === 'srl') {
-            bx = -8; by = 5.2; bz = -26;
+            bx = -8; by = 5.2; bz = -26; targetLabel = `SRL Briefing (L${M.lvl})`;
           } else if (M.briefingStationId === 'mpr') {
-            bx = -28; by = 5.4; bz = 10;
+            bx = -28; by = 5.4; bz = 10; targetLabel = `MPR Briefing (L${M.lvl})`;
           } else if (M.briefingStationId === 'gsc') {
-            bx = -40; by = 6.4; bz = 10;
+            bx = -40; by = 6.4; bz = 10; targetLabel = `GSC Briefing (L${M.lvl})`;
           }
         } else if (s.phase === 1 && M.isLab) {
-          bx = 22; by = 5.2; bz = -6;
+          bx = 22; by = 5.2; bz = -6; targetLabel = 'SAH Assembly Lab';
         } else if (s.phase === 1 && !M.isLab) {
           if (M.req.some((k) => !s.items.has(k))) {
-            bx = -8; by = 5.2; bz = -26;
+            bx = -8; by = 5.2; bz = -26; targetLabel = 'SRL Sensors';
           } else if (!s.mot) {
-            bx = 17; by = 5.2; bz = -25;
+            bx = 17; by = 5.2; bz = -25; targetLabel = 'SAH Motors';
           } else {
-            bx = 36; by = 7.2; bz = -12;
+            bx = 36; by = 7.2; bz = -12; targetLabel = 'Launch Pad';
           }
         } else if (s.phase === 2) {
-          bx = 24; by = 4.8; bz = 4;
+          bx = 24; by = 4.8; bz = 4; targetLabel = 'LCC Launch';
         } else if (s.phase === 3) {
-          bx = -34; by = 6.0; bz = -24;
+          bx = -34; by = 6.0; bz = -24; targetLabel = 'MCC Debrief';
         } else {
           showBeacon = false;
         }
 
         tutBeacon.visible = showBeacon;
+        missionTargetRef.current = showBeacon ? { x: bx, z: bz, label: targetLabel } : null;
         if (showBeacon) {
           tutBeacon.position.set(bx, by + Math.sin(now * 0.005) * 0.25, bz);
           tutBeacon.rotation.y += 0.025;
@@ -1438,7 +1529,9 @@ export default function App() {
         P.x = Math.max(-53, Math.min(53, P.x));
         P.z = Math.max(-35, Math.min(19, P.z));
 
-        cam.position.set(P.x, 1.7, P.z);
+        const targetCamY = VIEW_HEIGHTS[viewModeRef.current];
+        camYRef.current += (targetCamY - camYRef.current) * Math.min(1, dt * 10);
+        cam.position.set(P.x, camYRef.current, P.z);
         cam.rotation.order = 'YXZ';
         cam.rotation.set(lookRef.current.pitch, lookRef.current.yaw, 0);
 
@@ -1573,7 +1666,7 @@ export default function App() {
         container.removeChild(ren.domElement);
       }
     };
-  }, [closeMap, completeTutTask, initiateLaunch, loadRocketOnPad, openMap, say, syncCrateColors, syncWithServer, takeCrate, updatePlayer]);
+  }, [closeMap, completeTutTask, cycleViewMode, initiateLaunch, loadRocketOnPad, openMap, say, syncCrateColors, syncWithServer, takeCrate, updatePlayer]);
 
   // Derived HUD metrics
   const activeMission = CAMPAIGN_LEVELS[activeLevelIdx] || CAMPAIGN_LEVELS[0];
@@ -1696,6 +1789,8 @@ export default function App() {
       {started && (
         <FacilityMap
           playerPosRef={playerPosRef}
+          playerYawRef={lookRef}
+          missionTargetRef={missionTargetRef}
           currentLoc={currentLoc}
           mapExpanded={mapExpanded}
           tutStep={tutStep}
@@ -1822,7 +1917,7 @@ export default function App() {
 
       {/* Right Rocket Manifest Card (Positioned cleanly below Minimap, never overlaps) */}
       {started && !trainingActive && inStagingSector && !activeMission.isLab && (
-        <aside className="fixed top-[242px] right-3 z-20 w-[212px] rounded-xl bg-[#071124]/92 border border-cyan-400/25 p-3 shadow-[0_10px_28px_rgba(0,0,0,0.6)] text-xs">
+        <aside className="fixed top-[250px] right-3 z-20 w-[212px] rounded-xl bg-[#071124]/92 border border-cyan-400/25 p-3 shadow-[0_10px_28px_rgba(0,0,0,0.6)] text-xs">
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5 mb-2">
             <span className="font-bold text-white">🚀 Rocket Manifest</span>
             <span
@@ -1876,15 +1971,23 @@ export default function App() {
         </div>
       )}
 
-      {/* Bottom Controls Hint + Action & Fullscreen Buttons */}
+      {/* Bottom Controls Hint + Action, View Height & Fullscreen Buttons */}
       {started && !satLabOpen && (
         <>
           <div className="fixed bottom-3 left-3 z-20 hidden sm:block px-3 py-1.5 rounded-lg bg-[#071022]/85 border border-white/10 text-[11px] text-slate-400">
             WASD Move • Drag Look • Click 3D Objects or press <kbd className="text-[#4fe3d4]">E</kbd> • Map{' '}
-            <kbd className="text-[#4fe3d4]">M</kbd>
+            <kbd className="text-[#4fe3d4]">M</kbd> • View <kbd className="text-[#4fe3d4]">V</kbd>
           </div>
 
           <div className="fixed bottom-3 right-3 z-20 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={cycleViewMode}
+              title="Cycle Camera Elevation [V]"
+              className="px-3 py-2 rounded-xl bg-[#071124]/88 border border-cyan-400/30 hover:border-cyan-400/60 text-xs font-bold text-cyan-200 transition cursor-pointer"
+            >
+              👁 {viewMode === 'upper' ? 'Upper View' : viewMode === 'high' ? 'High Hover' : 'Eye Level'}
+            </button>
             <button
               onClick={() => {
                 if (started && !isFlying && currentInteractRef.current) {
@@ -2083,11 +2186,14 @@ export default function App() {
         }}
       />
 
-      {/* LEVEL 1: 3D SATELLITE ASSEMBLY LAB */}
+      {/* LEVEL 1: 5-STAGE SATELLITE, ROCKET & LAUNCH LAB */}
       <SatelliteAssemblyLab
         visible={satLabOpen}
         starCredits={playerState.starCredits}
         alreadyCompleted={playerState.completedLevels.includes(1)}
+        initialProgress={playerState.level1Progress}
+        onSaveProgress={handleSaveLevel1Progress}
+        onReplayReset={handleReplayResetLevel1}
         onCompleteMission={handleCompleteLevel1}
         onContinueToLevel2={() => {
           setSatLabOpen(false);

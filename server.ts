@@ -11,7 +11,7 @@ const PORT = 3000;
 const DB_DIR = path.join(__dirname, '.data');
 const DB_FILE = path.join(DB_DIR, 'galaxyx-db.json');
 
-const REQUIRED_LEVEL_1_PARTS = [
+const REQUIRED_LEVEL_1_SAT_PARTS = [
   'bus',
   'solar',
   'battery',
@@ -22,6 +22,50 @@ const REQUIRED_LEVEL_1_PARTS = [
   'adcs',
   'thermal',
 ] as const;
+
+const REQUIRED_LEVEL_1_ROCKET_PARTS = [
+  'first_stage_structure',
+  'first_stage_tanks',
+  'first_stage_engines',
+  'interstage',
+  'second_stage_body',
+  'second_stage_engine',
+  'avionics',
+  'grid_fins',
+  'landing_legs',
+  'payload_fairing',
+] as const;
+
+export type StoredLaunchSequenceStatus =
+  | 'not_started'
+  | 'countdown'
+  | 'ignition'
+  | 'ascent'
+  | 'completed';
+
+export interface StoredLevel1Progress {
+  stage: 1 | 2 | 3 | 4 | 5;
+  satParts: string[];
+  rocketParts: string[];
+  stage1Done: boolean;
+  stage2Done: boolean;
+  stage3Done: boolean;
+  stage4Done: boolean;
+  stage5Done: boolean;
+  launchStatus: StoredLaunchSequenceStatus;
+}
+
+const DEFAULT_LEVEL1_PROGRESS: StoredLevel1Progress = {
+  stage: 1,
+  satParts: [],
+  rocketParts: [],
+  stage1Done: false,
+  stage2Done: false,
+  stage3Done: false,
+  stage4Done: false,
+  stage5Done: false,
+  launchStatus: 'not_started',
+};
 
 export interface RewardTransaction {
   id: string;
@@ -46,6 +90,7 @@ export interface StoredPlayerRecord {
   starCredits: number;
   badges: string[];
   transactions: RewardTransaction[];
+  level1Progress: StoredLevel1Progress;
   updatedAt: string;
 }
 
@@ -107,9 +152,18 @@ function getOrCreatePlayer(db: DatabaseSchema, userId: string, callsign?: string
       starCredits: 0,
       badges: [],
       transactions: [],
+      level1Progress: { ...DEFAULT_LEVEL1_PROGRESS },
       updatedAt: new Date().toISOString(),
     };
     saveDb(db);
+  }
+  if (!db.users[id].level1Progress) {
+    db.users[id].level1Progress = { ...DEFAULT_LEVEL1_PROGRESS };
+  } else {
+    db.users[id].level1Progress = {
+      ...DEFAULT_LEVEL1_PROGRESS,
+      ...db.users[id].level1Progress,
+    };
   }
   return db.users[id];
 }
@@ -190,25 +244,108 @@ async function startServer() {
     res.json({ player });
   });
 
-  // Server-validated Level 1 Satellite Assembly completion (+1000 SC & SATELLITE_BUILDER once per user)
+  // Persist mid-level stage progress for Level 1 (5-stage mission) or reset on replay
+  app.post('/api/levels/1/progress', (req, res) => {
+    const userId = normalizeUserId(String(req.body?.userId || 'explorer-default'));
+    const db = ensureDb();
+    const player = getOrCreatePlayer(db, userId);
+
+    if (req.body?.reset === true) {
+      player.level1Progress = { ...DEFAULT_LEVEL1_PROGRESS };
+      player.updatedAt = new Date().toISOString();
+      saveDb(db);
+      res.json({ player });
+      return;
+    }
+
+    const incoming = req.body?.progress;
+    if (incoming && typeof incoming === 'object') {
+      const stageRaw = Number(incoming.stage);
+      const stage: 1 | 2 | 3 | 4 | 5 =
+        stageRaw === 5 ? 5 : stageRaw === 4 ? 4 : stageRaw === 3 ? 3 : stageRaw === 2 ? 2 : 1;
+
+      const satParts = Array.isArray(incoming.satParts)
+        ? Array.from(new Set<string>(incoming.satParts.map((p: unknown) => String(p)))).filter((p) =>
+            (REQUIRED_LEVEL_1_SAT_PARTS as readonly string[]).includes(p)
+          )
+        : player.level1Progress.satParts;
+
+      const rocketParts = Array.isArray(incoming.rocketParts)
+        ? Array.from(new Set<string>(incoming.rocketParts.map((p: unknown) => String(p)))).filter((p) =>
+            (REQUIRED_LEVEL_1_ROCKET_PARTS as readonly string[]).includes(p)
+          )
+        : player.level1Progress.rocketParts;
+
+      const rawLaunchStatus = String(incoming.launchStatus || 'not_started');
+      const launchStatus: StoredLaunchSequenceStatus =
+        rawLaunchStatus === 'countdown' ||
+        rawLaunchStatus === 'ignition' ||
+        rawLaunchStatus === 'ascent' ||
+        rawLaunchStatus === 'completed'
+          ? rawLaunchStatus
+          : 'not_started';
+
+      player.level1Progress = {
+        stage,
+        satParts,
+        rocketParts,
+        stage1Done: Boolean(incoming.stage1Done) && satParts.length === REQUIRED_LEVEL_1_SAT_PARTS.length,
+        stage2Done: Boolean(incoming.stage2Done) && rocketParts.length === REQUIRED_LEVEL_1_ROCKET_PARTS.length,
+        stage3Done: Boolean(incoming.stage3Done),
+        stage4Done: Boolean(incoming.stage4Done),
+        stage5Done: Boolean(incoming.stage5Done) && launchStatus === 'completed',
+        launchStatus,
+      };
+      player.updatedAt = new Date().toISOString();
+      saveDb(db);
+    }
+
+    res.json({ player });
+  });
+
+  // Server-validated Level 1 (5-Stage) completion (+1000 SC & SATELLITE_BUILDER once per user)
   app.post('/api/levels/1/complete', (req, res) => {
     const userId = normalizeUserId(String(req.body?.userId || 'explorer-default'));
-    const installedParts = Array.isArray(req.body?.installedParts)
-      ? req.body.installedParts.map((p: unknown) => String(p))
+    const satRaw = Array.isArray(req.body?.installedSatParts)
+      ? req.body.installedSatParts
+      : Array.isArray(req.body?.installedParts)
+      ? req.body.installedParts
       : [];
+    const rocketRaw = Array.isArray(req.body?.installedRocketParts) ? req.body.installedRocketParts : [];
 
-    const uniqueParts = new Set(installedParts);
-    const hasAllNine = REQUIRED_LEVEL_1_PARTS.every((reqPart) => uniqueParts.has(reqPart));
+    const uniqueSat = new Set(satRaw.map((p: unknown) => String(p)));
+    const uniqueRocket = new Set(rocketRaw.map((p: unknown) => String(p)));
 
-    if (!hasAllNine) {
+    const hasAllNineSat = REQUIRED_LEVEL_1_SAT_PARTS.every((reqPart) => uniqueSat.has(reqPart));
+    const hasAllTenRocket = REQUIRED_LEVEL_1_ROCKET_PARTS.every((reqPart) => uniqueRocket.has(reqPart));
+    const launchpadDone = Boolean(req.body?.stage3LaunchpadDone);
+    const payloadDone = Boolean(req.body?.stage4PayloadDone);
+    const launchDone =
+      Boolean(req.body?.stage5LaunchDone) || req.body?.launchStatus === 'completed';
+
+    if (!hasAllNineSat || !hasAllTenRocket || !launchpadDone || !payloadDone || !launchDone) {
       res.status(400).json({
-        error: 'Incomplete satellite assembly. All 9 subsystems must be verified before claiming rewards.',
+        error:
+          'Incomplete Level 1 mission. All 5 stages (9 satellite parts, 10 rocket parts, launchpad positioning, payload fairing integration, and successful rocket launch) must be completed before claiming rewards.',
       });
       return;
     }
 
     const db = ensureDb();
     const player = getOrCreatePlayer(db, userId);
+
+    player.level1Progress = {
+      stage: 5,
+      satParts: [...REQUIRED_LEVEL_1_SAT_PARTS],
+      rocketParts: [...REQUIRED_LEVEL_1_ROCKET_PARTS],
+      stage1Done: true,
+      stage2Done: true,
+      stage3Done: true,
+      stage4Done: true,
+      stage5Done: true,
+      launchStatus: 'completed',
+    };
+
     const txKey = `${userId}:LEVEL_1_COMPLETE`;
     const alreadyRewarded =
       player.transactions.some((tx) => tx.key === txKey) || player.completedLevels.includes(1);
@@ -234,12 +371,13 @@ async function startServer() {
         amountStarCredits: 1000,
         amountGrantCredits: 0,
         badge: 'SATELLITE_BUILDER',
-        note: 'Level 1: Satellite Assembly Lab Completion Reward',
+        note: 'Level 1: Satellite, Rocket & Payload Integration Reward',
         timestamp: new Date().toISOString(),
       });
-      player.updatedAt = new Date().toISOString();
-      saveDb(db);
     }
+
+    player.updatedAt = new Date().toISOString();
+    saveDb(db);
 
     res.json({
       player,

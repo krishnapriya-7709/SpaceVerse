@@ -58,8 +58,8 @@ export const SatelliteBuilderBadgeSVG: React.FC<{ size?: number }> = ({ size = 1
   <svg width={size} height={size} viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="satGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#ffd700" />
-        <stop offset="50%" stopColor="#f59e0b" />
+        <stop offset="0%" stopColor="#fef08a" />
+        <stop offset="45%" stopColor="#f59e0b" />
         <stop offset="100%" stopColor="#b45309" />
       </linearGradient>
       <linearGradient id="satCyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -77,40 +77,69 @@ export const SatelliteBuilderBadgeSVG: React.FC<{ size?: number }> = ({ size = 1
         <feComposite in="SourceGraphic" in2="blur" operator="over" />
       </filter>
     </defs>
-    <polygon points="100,6 182,32 182,126 100,194 18,126 18,32" fill="url(#satCyanGrad)" filter="url(#satBadgeGlow)" />
-    <polygon points="100,12 174,36 174,122 100,184 26,122 26,36" fill="url(#satGoldGrad)" />
-    <polygon points="100,18 166,40 166,118 100,174 34,118 34,40" fill="url(#satNavyGrad)" />
-    <circle cx="55" cy="52" r="1.5" fill="#fff" opacity="0.9" />
-    <circle cx="145" cy="55" r="1.5" fill="#fff" opacity="0.9" />
-    <circle cx="48" cy="82" r="1.2" fill="#4fe3d4" opacity="0.8" />
-    <circle cx="152" cy="85" r="1.2" fill="#4fe3d4" opacity="0.8" />
-    <circle cx="68" cy="112" r="1.2" fill="#fff" opacity="0.8" />
-    <circle cx="132" cy="115" r="1.2" fill="#fff" opacity="0.8" />
-    <ellipse cx="100" cy="88" rx="58" ry="18" stroke="url(#satCyanGrad)" strokeWidth="2" fill="none" transform="rotate(-18, 100, 88)" opacity="0.85" strokeDasharray="4 2" />
-    <g transform="translate(100, 85)">
-      <rect x="-54" y="-10" width="28" height="20" rx="2" fill="#1e3a8a" stroke="#38bdf8" strokeWidth="1.5" />
-      <line x1="-40" y1="-10" x2="-40" y2="10" stroke="#38bdf8" strokeWidth="1" />
-      <line x1="-54" y1="0" x2="-26" y2="0" stroke="#38bdf8" strokeWidth="1" />
-      <line x1="-26" y1="0" x2="-14" y2="0" stroke="#94a3b8" strokeWidth="2" />
-      <rect x="26" y="-10" width="28" height="20" rx="2" fill="#1e3a8a" stroke="#38bdf8" strokeWidth="1.5" />
-      <line x1="40" y1="-10" x2="40" y2="10" stroke="#38bdf8" strokeWidth="1" />
-      <line x1="26" y1="0" x2="54" y2="0" stroke="#38bdf8" strokeWidth="1" />
-      <line x1="14" y1="0" x2="26" y2="0" stroke="#94a3b8" strokeWidth="2" />
-      <rect x="-14" y="-14" width="28" height="28" rx="3" fill="url(#satGoldGrad)" stroke="#ffffff" strokeWidth="1.5" />
-      <rect x="-9" y="-9" width="18" height="18" fill="#0c1a38" stroke="#ffd700" strokeWidth="1" />
-      <path d="M-8,-16 Q0,-24 8,-16" stroke="#ffffff" strokeWidth="2" fill="none" />
-      <line x1="0" y1="-14" x2="0" y2="-20" stroke="#4fe3d4" strokeWidth="1.5" />
-      <circle cx="0" cy="-21" r="1.8" fill="#ffd700" />
-      <rect x="-5" y="14" width="10" height="6" fill="#334155" stroke="#4fe3d4" strokeWidth="1" />
-      <circle cx="0" cy="18" r="2.5" fill="#38bdf8" />
-      <polygon points="-3,21 3,21 7,32 -7,32" fill="url(#satCyanGrad)" opacity="0.4" />
+    {/* Golden Outer Achievement Frame */}
+    <polygon points="100,6 182,32 182,126 100,194 18,126 18,32" fill="url(#satGoldGrad)" filter="url(#satBadgeGlow)" />
+    <polygon points="100,12 174,36 174,122 100,184 26,122 26,36" fill="url(#satCyanGrad)" />
+    <polygon points="100,17 167,40 167,118 100,176 33,118 33,40" fill="url(#satNavyGrad)" />
+
+    {/* Starfield Accents */}
+    <circle cx="52" cy="52" r="1.5" fill="#fff" opacity="0.9" />
+    <circle cx="148" cy="54" r="1.5" fill="#fff" opacity="0.9" />
+    <circle cx="46" cy="84" r="1.3" fill="#fde047" opacity="0.85" />
+    <circle cx="154" cy="88" r="1.3" fill="#4fe3d4" opacity="0.85" />
+    <circle cx="64" cy="116" r="1.2" fill="#fff" opacity="0.8" />
+    <circle cx="136" cy="116" r="1.2" fill="#fff" opacity="0.8" />
+
+    {/* Orbital Trajectory Arc */}
+    <ellipse cx="100" cy="86" rx="56" ry="18" stroke="url(#satGoldGrad)" strokeWidth="2" fill="none" transform="rotate(-18, 100, 86)" opacity="0.85" strokeDasharray="4 2" />
+
+    {/* Left: Falcon-Inspired Orbital Launch Rocket */}
+    <g transform="translate(69, 86) rotate(-14)">
+      {/* Booster exhaust flame */}
+      <polygon points="-4,26 4,26 0,38" fill="#fbbf24" />
+      <polygon points="-2,26 2,26 0,33" fill="#ffffff" />
+      {/* Aft landing legs (folded) */}
+      <path d="M-7,12 L-10,25 L-6,25 Z" fill="#1e293b" stroke="#94a3b8" strokeWidth="0.7" />
+      <path d="M7,12 L10,25 L6,25 Z" fill="#1e293b" stroke="#94a3b8" strokeWidth="0.7" />
+      {/* First stage hull */}
+      <rect x="-6" y="-2" width="12" height="27" rx="1.5" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1" />
+      {/* Interstage collar */}
+      <rect x="-6.2" y="-8" width="12.4" height="6" fill="#0f172a" stroke="#4fe3d4" strokeWidth="0.7" />
+      {/* Upper stage + payload fairing */}
+      <rect x="-6" y="-16" width="12" height="8" fill="#e2e8f0" />
+      <path d="M-6,-16 C-6,-28 0,-34 0,-34 C0,-34 6,-28 6,-16 Z" fill="#ffffff" stroke="#fde047" strokeWidth="1" />
+      <line x1="0" y1="-34" x2="0" y2="-16" stroke="#94a3b8" strokeWidth="0.8" />
     </g>
+
+    {/* Right: Orbital Earth Observation Satellite */}
+    <g transform="translate(120, 78) rotate(12)">
+      {/* Solar Wings */}
+      <rect x="-32" y="-7" width="18" height="14" rx="1.5" fill="#1d4ed8" stroke="#38bdf8" strokeWidth="1.2" />
+      <line x1="-23" y1="-7" x2="-23" y2="7" stroke="#93c5fd" strokeWidth="0.8" />
+      <line x1="-14" y1="0" x2="-9" y2="0" stroke="#cbd5e1" strokeWidth="1.6" />
+      <rect x="14" y="-7" width="18" height="14" rx="1.5" fill="#1d4ed8" stroke="#38bdf8" strokeWidth="1.2" />
+      <line x1="23" y1="-7" x2="23" y2="7" stroke="#93c5fd" strokeWidth="0.8" />
+      <line x1="9" y1="0" x2="14" y2="0" stroke="#cbd5e1" strokeWidth="1.6" />
+      {/* Gold MLI Bus */}
+      <rect x="-9" y="-10" width="18" height="20" rx="2.5" fill="url(#satGoldGrad)" stroke="#ffffff" strokeWidth="1.2" />
+      <rect x="-5.5" y="-6" width="11" height="10" rx="1" fill="#0f172a" stroke="#4fe3d4" strokeWidth="0.8" />
+      {/* Dish */}
+      <path d="M-6,-12 Q0,-19 6,-12" stroke="#ffffff" strokeWidth="1.6" fill="none" />
+      <line x1="0" y1="-10" x2="0" y2="-15" stroke="#4fe3d4" strokeWidth="1.3" />
+      <circle cx="0" cy="-16" r="1.4" fill="#fde047" />
+      {/* Camera aperture */}
+      <circle cx="0" cy="12" r="2.2" fill="#38bdf8" stroke="#e2e8f0" strokeWidth="0.8" />
+    </g>
+
+    {/* Top GALAXY-X Branding */}
     <text x="100" y="34" fill="url(#satGoldGrad)" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="8.5" letterSpacing="1.8" textAnchor="middle">
       SPACEVERSE • GALAXY-X
     </text>
+
+    {/* Bottom Ribbon */}
     <g transform="translate(100, 150)">
-      <path d="M-72,-12 L72,-12 L65,12 L-65,12 Z" fill="#030b1c" stroke="url(#satCyanGrad)" strokeWidth="2" />
-      <text x="0" y="4" fill="#ffffff" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="10" letterSpacing="1.2" textAnchor="middle">
+      <path d="M-72,-12 L72,-12 L65,12 L-65,12 Z" fill="#030b1c" stroke="url(#satGoldGrad)" strokeWidth="2.2" />
+      <text x="0" y="4" fill="#fef08a" fontFamily="system-ui, sans-serif" fontWeight="900" fontSize="10" letterSpacing="1.2" textAnchor="middle">
         SATELLITE BUILDER
       </text>
     </g>

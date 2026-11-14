@@ -218,24 +218,36 @@ export const TrainingIntroModal: React.FC<{
   if (!visible) return null;
   return (
     <div className="fixed inset-0 z-[2100] bg-black/80 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-[#07142b] border border-cyan-400/45 p-7 shadow-[0_24px_64px_rgba(0,0,0,0.85)]">
+      <div className="w-full max-w-lg rounded-2xl bg-[#07142b] border border-cyan-400/45 p-6 md:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.85)]">
         <div className="text-[11px] font-mono-tech font-bold uppercase tracking-[2px] text-[#4fe3d4]">
           FLIGHT ACADEMY BRIEFING
         </div>
         <h2 className="font-display text-xl md:text-2xl font-extrabold text-white mt-1">
-          CADET TRAINING INITIATED
+          CADET PRACTICE INITIATED
         </h2>
-        <p className="text-sm text-slate-300 mt-3 leading-relaxed">
-          Welcome aboard, Explorer! Before you begin your missions, let&apos;s get familiar with your new workspace. Explore the facility, interact with its equipment, and learn how space missions come together.
+        <p className="text-xs md:text-sm text-slate-300 mt-2 leading-relaxed">
+          Master 6 hands-on engineering stations across GALAXY-X using live hardware simulations before commanding missions.
         </p>
 
-        <div className="mt-4 p-3.5 rounded-xl bg-[#0b1b38] border border-cyan-400/25 text-xs text-slate-300 space-y-1.5">
-          <div>• <strong className="text-white">Move:</strong> WASD / Arrow keys (or touch joystick)</div>
-          <div>• <strong className="text-white">Look:</strong> Click &amp; drag viewport</div>
-          <div>• <strong className="text-white">Interact:</strong> Click 3D equipment directly or walk up and press <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-white/20 text-[#4fe3d4]">E</kbd></div>
+        <div className="mt-4 grid grid-cols-3 gap-2.5 text-center text-xs">
+          <div className="p-2.5 rounded-xl bg-[#0b1b38] border border-cyan-400/25">
+            <div className="text-xl">🗺️</div>
+            <div className="font-bold text-white mt-1">WASD / Map</div>
+            <div className="text-[10px] text-slate-400">Move &amp; fast-travel</div>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0b1b38] border border-cyan-400/25">
+            <div className="text-xl">🛰️</div>
+            <div className="font-bold text-white mt-1">Click / Key E</div>
+            <div className="text-[10px] text-slate-400">Inspect hardware</div>
+          </div>
+          <div className="p-2.5 rounded-xl bg-[#0b1b38] border border-cyan-400/25">
+            <div className="text-xl">⚡</div>
+            <div className="font-bold text-white mt-1">6 Mini-Labs</div>
+            <div className="text-[10px] text-slate-400">Interactive tests</div>
+          </div>
         </div>
 
-        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <div className="mt-5 flex flex-col sm:flex-row gap-3">
           <button
             onClick={() => {
               SFX.click();
@@ -243,7 +255,7 @@ export const TrainingIntroModal: React.FC<{
             }}
             className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[#4fe3d4] to-[#0ea5e9] text-[#041022] font-extrabold text-xs md:text-sm tracking-wide uppercase hover:brightness-110 transition cursor-pointer"
           >
-            BEGIN TRAINING ▶
+            BEGIN PRACTICE ▶
           </button>
           <button
             onClick={() => {
@@ -275,7 +287,7 @@ export const TrainingCompleteModal: React.FC<{
           CADET TRAINING COMPLETED!
         </h2>
         <p className="text-sm text-slate-300 mt-3 leading-relaxed">
-          You&apos;ve explored the facility, learned the essential systems, and are ready to launch your first mission from the Training Academy.
+          You&apos;ve explored the facility, mastered the hardware labs, and are ready for your first mission.
         </p>
 
         <div className="my-5 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-400/35 text-xs text-emerald-200 font-semibold">
@@ -297,236 +309,9 @@ export const TrainingCompleteModal: React.FC<{
 };
 
 /* ========================================================
-   5. TUTORIAL EXPLANATION & 4-SUBSYSTEM EXPLORER MODALS
+   5. INTERACTIVE PRACTICE MODALS (RE-EXPORTED)
    ======================================================== */
-interface TutorialTaskModalProps {
-  taskNum: number | null;
-  onContinue: () => void;
-}
-
-export const TutorialTaskModal: React.FC<TutorialTaskModalProps> = ({ taskNum, onContinue }) => {
-  if (!taskNum || taskNum === 3) return null;
-
-  const contentMap: Record<
-    number,
-    { title: string; lead: string; bulletsTitle: string; bullets: string[]; nextHint?: string }
-  > = {
-    1: {
-      title: 'Task 1 – Facility Map Opened ✓',
-      lead: "Well done! You've opened the GALAXY-X Facility Map directory and can now fast-travel across all 7 sectors.",
-      bulletsTitle: 'Navigation Key Notes',
-      bullets: [
-        'Clicking the top-right radar minimap or pressing M opens the expanded facility blueprint.',
-        'Click any sector room or directory entry to fast-navigate immediately.',
-        'Your live facility location tracks continuously on the radar.',
-      ],
-      nextHint: 'NEXT: Use the Map (M) to travel to the Ground Station and inspect the deep-space antenna.',
-    },
-    2: {
-      title: 'Task 2 – Ground Station Orientation Complete',
-      lead: 'Communication Link Established! Ground stations form the vital link between flight controllers and spacecraft.',
-      bulletsTitle: 'Telemetry Principles',
-      bullets: [
-        'Parabolic High-Gain Antennas: Track vehicles through orbital passes and deep space vectors.',
-        'Uplink & Downlink: Downlink delivers sensor telemetry & imagery; uplink transmits flight maneuvers.',
-        'Signal Latency: Radio waves travel at the speed of light, introducing delay over deep-space distances.',
-      ],
-    },
-    4: {
-      title: 'Task 4 – Scientific Instruments Complete',
-      lead: 'Payload Analysis Complete! Scientific instruments are the core reason rockets fly.',
-      bulletsTitle: 'Instrument Engineering Trade-offs',
-      bullets: [
-        'Mass vs. Impulse: Heavier payloads demand higher motor impulse to achieve target altitudes.',
-        'Sensor Capabilities: Thermometers sample atmospheric heat, Barometers map pressure, and Cameras capture optics.',
-        'Budget Discipline: Match sensors carefully to contract requisites and budget limits.',
-      ],
-    },
-    5: {
-      title: 'Task 5 – Mission Control Complete',
-      lead: 'Flight Operations Verified! Mission Control coordinates missions from contract briefing to orbital debrief.',
-      bulletsTitle: 'Operations Overview',
-      bullets: [
-        'Receive your mission target altitude, budget ceiling, and required instruments here.',
-        'Monitor live telemetry streams and flight dynamics on the flight director video wall.',
-        'Return here after successful launches to claim grant awards and unlock higher tiers.',
-      ],
-    },
-    6: {
-      title: 'Task 6 – Resource Systems Complete',
-      lead: 'Financial & Vehicle Engineering Understood! Ready for active mission assignments.',
-      bulletsTitle: 'Resource Architecture',
-      bullets: [
-        'Grant Credits (₡): Operational funding used to requisition motors and scientific instruments.',
-        'Star Credits (★): Career progression currency earned from major aerospace achievements.',
-        'Rocket Manifest: Balance dry vehicle mass against propulsion impulse to hit apogee targets.',
-      ],
-    },
-  };
-
-  const data = contentMap[taskNum];
-  if (!data) return null;
-
-  return (
-    <div className="fixed inset-0 z-[2200] bg-black/80 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-[#07142b] border border-cyan-400/45 p-6 md:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.85)]">
-        <div className="text-[11px] font-mono-tech font-bold uppercase tracking-widest text-[#4fe3d4]">
-          CADET ORIENTATION // TASK {taskNum} OF 6
-        </div>
-        <h3 className="font-display text-lg md:text-xl font-extrabold text-white mt-1">{data.title}</h3>
-        <p className="text-xs md:text-sm text-slate-300 mt-2.5 leading-relaxed">{data.lead}</p>
-
-        <div className="mt-4 p-3.5 rounded-xl bg-[#0b1b38] border border-cyan-400/25">
-          <div className="text-xs font-bold text-[#4fe3d4] mb-1.5">{data.bulletsTitle}:</div>
-          <ul className="space-y-1.5 text-xs text-slate-300 list-disc pl-4">
-            {data.bullets.map((b, idx) => (
-              <li key={idx}>{b}</li>
-            ))}
-          </ul>
-        </div>
-
-        {data.nextHint && <p className="mt-3 text-xs font-bold text-[#4fe3d4]">➜ {data.nextHint}</p>}
-
-        <button
-          onClick={() => {
-            SFX.click();
-            onContinue();
-          }}
-          className="mt-5 w-full py-3 rounded-xl bg-gradient-to-r from-[#4fe3d4] to-[#0ea5e9] text-[#041022] font-extrabold text-xs tracking-wide uppercase hover:brightness-110 transition cursor-pointer"
-        >
-          CONTINUE ❯
-        </button>
-      </div>
-    </div>
-  );
-};
-
-interface SubsystemExplorerModalProps {
-  visible: boolean;
-  onComplete: () => void;
-  onClose?: () => void;
-}
-
-const CORE_SUBSYSTEMS = [
-  {
-    id: 1,
-    title: '1. Bus & Frame',
-    desc: 'Structural aluminum & octagonal chassis that withstands extreme vibrational loads during launch.',
-  },
-  {
-    id: 2,
-    title: '2. Power & Solar',
-    desc: 'Photovoltaic GaAs arrays and Li-ion battery storage supplying continuous electrical wattage.',
-  },
-  {
-    id: 3,
-    title: '3. Flight Avionics',
-    desc: 'Radiation-hardened onboard guidance computer executing attitude, telemetry, and sensor commands.',
-  },
-  {
-    id: 4,
-    title: '4. Propulsion Mount',
-    desc: 'High-strength engine bulkhead transferring thruster impulse cleanly through the center of mass.',
-  },
-];
-
-export const SubsystemExplorerModal: React.FC<SubsystemExplorerModalProps> = ({
-  visible,
-  onComplete,
-  onClose,
-}) => {
-  const [inspected, setInspected] = useState<Set<number>>(() => new Set());
-
-  useEffect(() => {
-    if (visible) setInspected(new Set());
-  }, [visible]);
-
-  if (!visible) return null;
-  const allDone = inspected.size >= 4;
-
-  return (
-    <div className="fixed inset-0 z-[2200] bg-black/80 flex items-center justify-center p-4">
-      <div className="w-full max-w-xl rounded-2xl bg-[#07142b] border border-cyan-400/45 p-6 md:p-7 shadow-[0_24px_64px_rgba(0,0,0,0.85)]">
-        <div className="flex items-center justify-between">
-          <div className="text-[11px] font-mono-tech font-bold uppercase tracking-widest text-[#4fe3d4]">
-            SPACECRAFT ASSEMBLY HANGAR
-          </div>
-          {onClose && (
-            <button
-              onClick={() => {
-                SFX.click();
-                onClose();
-              }}
-              className="text-xs text-slate-400 hover:text-white cursor-pointer"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-        <h3 className="font-display text-lg md:text-xl font-extrabold text-white mt-1">
-          Spacecraft Assembly Architecture
-        </h3>
-        <p className="text-xs text-slate-300 mt-2">
-          Every spacecraft is built from four core structural &amp; functional pillars. Click all 4 subsystems below to inspect their role:
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-          {CORE_SUBSYSTEMS.map((sub) => {
-            const done = inspected.has(sub.id);
-            return (
-              <button
-                key={sub.id}
-                type="button"
-                onClick={() => {
-                  SFX.select();
-                  setInspected((prev) => {
-                    const next = new Set(prev);
-                    next.add(sub.id);
-                    return next;
-                  });
-                }}
-                className={`p-3.5 rounded-xl border text-left transition cursor-pointer ${
-                  done
-                    ? 'bg-emerald-500/12 border-emerald-400/60'
-                    : 'bg-[#0b1b38] border-white/10 hover:border-cyan-400/50'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs font-bold text-white">
-                  <span>{sub.title}</span>
-                  <span className={done ? 'text-emerald-400' : 'text-slate-500'}>
-                    {done ? '✔' : '○'}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-300 mt-1.5 leading-snug">{sub.desc}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className={`mt-4 text-xs font-semibold ${allDone ? 'text-emerald-400' : 'text-[#4fe3d4]'}`}>
-          {allDone
-            ? 'All 4 subsystems inspected! You are ready to proceed.'
-            : `Select all 4 subsystems to continue (${inspected.size}/4 inspected).`}
-        </div>
-
-        <button
-          disabled={!allDone}
-          onClick={() => {
-            SFX.click();
-            onComplete();
-          }}
-          className={`mt-4 w-full py-3 rounded-xl font-extrabold text-xs tracking-wide uppercase transition ${
-            allDone
-              ? 'bg-gradient-to-r from-[#4fe3d4] to-[#0ea5e9] text-[#041022] hover:brightness-110 cursor-pointer'
-              : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-          }`}
-        >
-          CONTINUE ❯
-        </button>
-      </div>
-    </div>
-  );
-};
+export { SubsystemExplorerModal, TutorialTaskModal } from './TrainingInteractiveModals';
 
 /* ========================================================
    6. TRAINING ACADEMY / 10-LEVEL CAMPAIGN SELECTION SCREEN
@@ -623,8 +408,8 @@ export const MissionBriefingModal: React.FC<{
           <div className="mt-3 p-3.5 rounded-xl bg-[#050e20] border border-cyan-400/30 flex items-center gap-4">
             <SatelliteIllustrationSVG className="w-28 h-20 shrink-0" />
             <div className="text-xs text-slate-300 leading-relaxed">
-              <div className="font-bold text-[#4fe3d4] mb-0.5">Hangar Assembly Directive</div>
-              Build your first Earth-observation satellite inside the cleanroom workshop by assembling all 9 essential subsystems onto their matching numbered mounting points (1–9).
+              <div className="font-bold text-[#4fe3d4] mb-0.5">Hangar &amp; Launchpad Directive</div>
+              Assemble all 9 satellite subsystems, construct your 10-part two-stage rocket, stage it vertically on Launch Complex 39X, seal your satellite inside the payload fairing, and launch the rocket into space.
             </div>
           </div>
         )}
@@ -641,9 +426,9 @@ export const MissionBriefingModal: React.FC<{
             </div>
           </div>
           <div className="p-3 rounded-xl bg-[#0b1b38] border border-cyan-400/25">
-            <div className="text-slate-400 text-[10px] uppercase">{level.isLab ? 'Subsystems' : 'Budget Limit'}</div>
+            <div className="text-slate-400 text-[10px] uppercase">{level.isLab ? 'Mission Scope' : 'Budget Limit'}</div>
             <div className="font-mono-tech font-extrabold text-[#4fe3d4] mt-0.5">
-              {level.isLab ? '9 Components' : `${level.b}M Grant`}
+              {level.isLab ? '5 Engineering Stages' : `${level.b}M Grant`}
             </div>
           </div>
           <div className="p-3 rounded-xl bg-[#0b1b38] border border-amber-400/25">

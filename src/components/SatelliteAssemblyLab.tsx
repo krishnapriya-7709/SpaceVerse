@@ -1,10 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { SAT_COMPONENTS, SatComponentSpec, SatSubsystemId } from '../data/spaceverseData';
+import {
+  DEFAULT_LEVEL1_PROGRESS,
+  LaunchSequenceStatus,
+  Level1Progress,
+  ROCKET_COMPONENTS,
+  RocketPartId,
+  SAT_COMPONENTS,
+  SatComponentSpec,
+  SatSubsystemId,
+} from '../data/spaceverseData';
 import { buildDetailedSatelliteRig, SatelliteAssemblyRig } from '../three/satelliteBuilder';
 import { SFX } from '../utils/sfx';
-import { SatelliteBuilderBadgeSVG } from './BadgesSVG';
+import { LaunchpadPayloadStage } from './LaunchpadPayloadStage';
+import { RocketAssemblyStage } from './RocketAssemblyStage';
 import { SatComponentObjectSVG } from './SatComponentIcons';
 
 export interface Level1RewardResult {
@@ -13,11 +23,23 @@ export interface Level1RewardResult {
   newStarBalance: number;
 }
 
+export interface Level1CompletionPayload {
+  installedSatParts: SatSubsystemId[];
+  installedRocketParts: RocketPartId[];
+  stage3LaunchpadDone: boolean;
+  stage4PayloadDone: boolean;
+  stage5LaunchDone: boolean;
+  launchStatus: LaunchSequenceStatus;
+}
+
 interface SatelliteAssemblyLabProps {
   visible: boolean;
   starCredits: number;
   alreadyCompleted: boolean;
-  onCompleteMission: (installedIds: SatSubsystemId[]) => Promise<Level1RewardResult>;
+  initialProgress?: Level1Progress;
+  onSaveProgress: (progress: Level1Progress) => void;
+  onReplayReset: () => void;
+  onCompleteMission: (payload: Level1CompletionPayload) => Promise<Level1RewardResult>;
   onContinueToLevel2: () => void;
   onBackToAcademy: () => void;
   onExit: () => void;
@@ -36,73 +58,21 @@ interface ProjectedPort {
   visible: boolean;
 }
 
-const ConfettiStarsOverlay: React.FC = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const colors = ['#4fe3d4', '#38bdf8', '#f2c14e', '#34d399', '#ffffff'];
-    const particles = Array.from({ length: 110 }, () => ({
-      x: Math.random() * canvas.width,
-      y: -20 - Math.random() * 240,
-      vx: (Math.random() - 0.5) * 3.2,
-      vy: 2.2 + Math.random() * 3.8,
-      size: 4 + Math.random() * 6,
-      rot: Math.random() * Math.PI * 2,
-      vRot: (Math.random() - 0.5) * 0.16,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      isStar: Math.random() > 0.5,
-    }));
-
-    let raf = 0;
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.rot += p.vRot;
-        if (p.y > canvas.height + 20) {
-          p.y = -15;
-          p.x = Math.random() * canvas.width;
-        }
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
-        ctx.fillStyle = p.color;
-        if (p.isStar) {
-          ctx.beginPath();
-          for (let i = 0; i < 5; i++) {
-            const a = (i * Math.PI * 2) / 5;
-            ctx.lineTo(Math.cos(a) * p.size, Math.sin(a) * p.size);
-            ctx.lineTo(Math.cos(a + Math.PI / 5) * (p.size * 0.45), Math.sin(a + Math.PI / 5) * (p.size * 0.45));
-          }
-          ctx.closePath();
-          ctx.fill();
-        } else {
-          ctx.fillRect(-p.size / 2, -p.size / 3, p.size, p.size * 0.6);
-        }
-        ctx.restore();
-      });
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-[5550]" />;
-};
+const STAGE_TRACKER_ITEMS: { num: 1 | 2 | 3 | 4 | 5; label: string }[] = [
+  { num: 1, label: 'Stage 1: Satellite Assembly' },
+  { num: 2, label: 'Stage 2: Rocket Assembly' },
+  { num: 3, label: 'Stage 3: Launchpad Positioning' },
+  { num: 4, label: 'Stage 4: Payload Integration' },
+  { num: 5, label: 'Stage 5: Rocket Launching' },
+];
 
 export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
   visible,
   starCredits,
   alreadyCompleted,
+  initialProgress,
+  onSaveProgress,
+  onReplayReset,
   onCompleteMission,
   onContinueToLevel2,
   onBackToAcademy,
@@ -113,7 +83,16 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
-  const [installed, setInstalled] = useState<Set<SatSubsystemId>>(() => new Set());
+  const [level1Progress, setLevel1Progress] = useState<Level1Progress>(() => ({
+    ...DEFAULT_LEVEL1_PROGRESS,
+    ...(initialProgress || {}),
+  }));
+  const progressRef = useRef(level1Progress);
+  progressRef.current = level1Progress;
+
+  const [installed, setInstalled] = useState<Set<SatSubsystemId>>(
+    () => new Set(initialProgress?.satParts || [])
+  );
   const [selectedId, setSelectedId] = useState<SatSubsystemId | null>(null);
   const [hoveredComponent, setHoveredComponent] = useState<SatComponentSpec | null>(null);
   const [draggingId, setDraggingId] = useState<SatSubsystemId | null>(null);
@@ -123,8 +102,7 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
   const [shakingId, setShakingId] = useState<SatSubsystemId | null>(null);
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const [spinningComplete, setSpinningComplete] = useState<boolean>(false);
-  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false);
-  const [rewardOutcome, setRewardOutcome] = useState<Level1RewardResult | null>(null);
+  const [showStage1SuccessModal, setShowStage1SuccessModal] = useState<boolean>(false);
 
   const [notification, setNotification] = useState<FeedbackState | null>(null);
   const [lastStatusKind, setLastStatusKind] = useState<'neutral' | 'success' | 'error'>('neutral');
@@ -207,6 +185,14 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
       setDraggingId(null);
       setHoveredPortId(null);
 
+      const satList = Array.from(next);
+      const nextProgress: Level1Progress = {
+        ...progressRef.current,
+        satParts: satList,
+      };
+      setLevel1Progress(nextProgress);
+      onSaveProgress(nextProgress);
+
       // Green flash indicator on port
       setPortFlash({ id: compId, kind: 'correct' });
       window.setTimeout(() => setPortFlash((cur) => (cur?.id === compId ? null : cur)), 950);
@@ -229,10 +215,10 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
         type: 'success',
       });
 
-      // Only trigger completion when ALL 9 components are installed!
+      // Stage 1 completion -> advance to Stage 2 (NO rewards yet!)
       if (next.size === SAT_COMPONENTS.length && !completionTriggeredRef.current) {
         completionTriggeredRef.current = true;
-        SFX.levelComplete();
+        SFX.taskComplete();
         setSpinningComplete(true);
         if (rig) {
           rig.animatedHandles.thrusterPlumes.forEach((plume) => {
@@ -240,21 +226,17 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
           });
         }
         setNotification({
-          badgeLabel: 'MISSION COMPLETE ✓',
-          text: 'All 9 satellite subsystems are successfully installed! Initializing orbital commissioning and rewards.',
+          badgeLabel: 'SATELLITE ASSEMBLY SUCCESSFUL ✓',
+          text: 'All 9 satellite subsystems are verified! Proceed to Stage 2 to build the launch rocket.',
           type: 'success',
         });
 
-        onCompleteMission(Array.from(next)).then((result) => {
-          setRewardOutcome(result);
-          window.setTimeout(() => {
-            SFX.badgeUnlock();
-            setShowSuccessModal(true);
-          }, 1150);
-        });
+        window.setTimeout(() => {
+          setShowStage1SuccessModal(true);
+        }, 900);
       }
     },
-    [onCompleteMission]
+    [onSaveProgress]
   );
 
   const handleReject = useCallback((dragged: SatSubsystemId, attemptedTarget: SatSubsystemId) => {
@@ -289,9 +271,15 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
     setDraggingId(null);
     setPortFlash(null);
     setSpinningComplete(false);
-    setShowSuccessModal(false);
-    setRewardOutcome(null);
+    setShowStage1SuccessModal(false);
     setLastStatusKind('neutral');
+    const nextProgress: Level1Progress = {
+      ...progressRef.current,
+      satParts: [],
+      stage1Done: false,
+    };
+    setLevel1Progress(nextProgress);
+    onSaveProgress(nextProgress);
     const rig = rigRef.current;
     if (rig) {
       rig.skeletonGuide.visible = true;
@@ -307,23 +295,60 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
       text: 'Drag each numbered component object (1–9) onto its matching numbered point on the satellite.',
       type: 'neutral',
     });
-  }, []);
+  }, [onSaveProgress]);
 
-  // Reset assembly cleanly whenever the lab opens fresh
+  const handleFullReplayLevel1 = useCallback(() => {
+    completionTriggeredRef.current = false;
+    const fresh: Level1Progress = { ...DEFAULT_LEVEL1_PROGRESS };
+    setLevel1Progress(fresh);
+    setInstalled(new Set());
+    setSelectedId(null);
+    setDraggingId(null);
+    setPortFlash(null);
+    setSpinningComplete(false);
+    setShowStage1SuccessModal(false);
+    setLastStatusKind('neutral');
+    setNotification(null);
+    onReplayReset();
+  }, [onReplayReset]);
+
+  // Restore saved progress cleanly whenever the lab opens
   useEffect(() => {
     if (visible) {
-      completionTriggeredRef.current = false;
-      setInstalled(new Set());
+      const saved = initialProgress ? { ...DEFAULT_LEVEL1_PROGRESS, ...initialProgress } : { ...DEFAULT_LEVEL1_PROGRESS };
+      // If all 5 stages including Rocket Launch completed in a prior run, start replay cleanly at Stage 1
+      let effectiveProgress: Level1Progress =
+        saved.stage5Done && saved.launchStatus === 'completed'
+          ? { ...DEFAULT_LEVEL1_PROGRESS }
+          : saved;
+
+      // If interrupted mid-countdown/ignition/ascent, reset launchStatus to 'not_started' so player restarts launch safely
+      if (effectiveProgress.stage === 5 && effectiveProgress.launchStatus !== 'completed') {
+        const prereqsOk =
+          effectiveProgress.stage1Done &&
+          effectiveProgress.stage2Done &&
+          effectiveProgress.stage3Done &&
+          effectiveProgress.stage4Done;
+        effectiveProgress = prereqsOk
+          ? { ...effectiveProgress, launchStatus: 'not_started' }
+          : { ...DEFAULT_LEVEL1_PROGRESS };
+      }
+
+      setLevel1Progress(effectiveProgress);
+      const restoredSat = new Set<SatSubsystemId>(effectiveProgress.satParts || []);
+      setInstalled(restoredSat);
+      completionTriggeredRef.current = restoredSat.size === SAT_COMPONENTS.length;
       setSelectedId(null);
       setDraggingId(null);
       setPortFlash(null);
-      setSpinningComplete(false);
-      setShowSuccessModal(false);
-      setRewardOutcome(null);
+      setSpinningComplete(restoredSat.size === SAT_COMPONENTS.length);
+      setShowStage1SuccessModal(
+        effectiveProgress.stage === 1 && restoredSat.size === SAT_COMPONENTS.length
+      );
       setLastStatusKind('neutral');
       setNotification(null);
     }
-  }, [visible]);
+  }, [visible, initialProgress]);
 
   const raycastDropSlot = useCallback((clientX: number, clientY: number): SatSubsystemId | null => {
     const canvas = canvasRef.current;
@@ -379,9 +404,9 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
     return bestId;
   }, []);
 
-  // Three.js Workshop Viewport Setup
+  // Three.js Workshop Viewport Setup (Active during Stage 1)
   useEffect(() => {
-    if (!visible || !canvasRef.current) return;
+    if (!visible || level1Progress.stage !== 1 || !canvasRef.current) return;
     const canvas = canvasRef.current;
 
     const scene = new THREE.Scene();
@@ -394,6 +419,7 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.1;
     rendererRef.current = renderer;
@@ -449,6 +475,14 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
 
     const rig = buildDetailedSatelliteRig();
     rig.root.position.set(0, 0.06, 0);
+    if (installedRef.current.has('bus')) {
+      rig.skeletonGuide.visible = false;
+    }
+    SAT_COMPONENTS.forEach((c) => {
+      if (installedRef.current.has(c.id)) {
+        rig.parts[c.id].visible = true;
+      }
+    });
     rigRef.current = rig;
     scene.add(rig.root);
 
@@ -598,11 +632,11 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
       pmrem.dispose();
       renderer.dispose();
     };
-  }, [visible]);
+  }, [visible, level1Progress.stage]);
 
-  // Unified Pointer Drag-and-Drop tracking across viewport
+  // Unified Pointer Drag-and-Drop tracking across viewport (Stage 1)
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || level1Progress.stage !== 1) return;
 
     const handleMove = (e: PointerEvent) => {
       const pd = pointerDragRef.current;
@@ -665,27 +699,28 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
     };
-  }, [visible, raycastDropSlot, handleInstall, handleReject]);
+  }, [visible, level1Progress.stage, raycastDropSlot, handleInstall, handleReject]);
 
   if (!visible) return null;
 
   const draggedComp = draggingId ? SAT_COMPONENTS.find((c) => c.id === draggingId) : null;
   const activeInspectComp = draggedComp ?? hoveredComponent ?? (selectedId ? SAT_COMPONENTS.find((c) => c.id === selectedId) ?? null : null);
+  const activeStage = level1Progress.stage;
 
   return (
     <div className="fixed inset-0 z-[5000] flex flex-col bg-[#030816] text-[#e8eefc] select-none">
       {/* Top Workshop Bar */}
-      <div className="h-[60px] px-4 md:px-6 bg-[#071124] border-b border-cyan-400/30 flex items-center justify-between gap-3 shrink-0">
+      <div className="h-[56px] px-4 md:px-6 bg-[#071124] border-b border-cyan-400/30 flex items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <span className="px-2.5 py-1 rounded bg-cyan-400/15 border border-cyan-400/45 text-[#4fe3d4] text-[11px] font-bold tracking-wider uppercase shrink-0">
             LEVEL 01
           </span>
           <div className="min-w-0">
             <h2 className="font-display text-sm md:text-base font-extrabold tracking-wide text-white truncate">
-              LEVEL 1 – SATELLITE ASSEMBLY
+              LEVEL 1 – SATELLITE &amp; ROCKET ASSEMBLY
             </h2>
             <p className="text-[11px] text-slate-400 truncate hidden sm:block">
-              SPACEVERSE // GALAXY-X Spacecraft Engineering Laboratory
+              SPACEVERSE // GALAXY-X 5-Stage Aerospace Engineering Mission
             </p>
           </div>
         </div>
@@ -700,6 +735,7 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
 
           <button
             onClick={() => {
+              SFX.stopAllLaunchAudio();
               SFX.click();
               onBackToAcademy();
             }}
@@ -710,6 +746,7 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
 
           <button
             onClick={() => {
+              SFX.stopAllLaunchAudio();
               SFX.click();
               onExit();
             }}
@@ -720,10 +757,165 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
         </div>
       </div>
 
+      {/* Persistent 5-Stage Progress Tracker Header */}
+      <div className="bg-[#050d1d] border-b border-cyan-400/20 px-3 md:px-6 py-2 shrink-0">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 max-w-7xl mx-auto">
+          {STAGE_TRACKER_ITEMS.map((item) => {
+            const isCompleted =
+              (item.num === 1 && level1Progress.stage1Done) ||
+              (item.num === 2 && level1Progress.stage2Done) ||
+              (item.num === 3 && level1Progress.stage3Done) ||
+              (item.num === 4 && level1Progress.stage4Done) ||
+              (item.num === 5 && level1Progress.stage5Done);
+            const isCurrent = activeStage === item.num && !isCompleted;
+
+            return (
+              <div
+                key={item.num}
+                className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold flex items-center gap-2 transition ${
+                  isCompleted
+                    ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-200'
+                    : isCurrent
+                    ? 'bg-cyan-400/15 border-[#4fe3d4] text-white shadow-[0_0_14px_rgba(79,227,212,0.22)]'
+                    : 'bg-[#081326] border-white/10 text-slate-400'
+                }`}
+              >
+                <span
+                  className={`w-5 h-5 rounded-full text-[10px] font-mono-tech font-extrabold flex items-center justify-center shrink-0 ${
+                    isCompleted
+                      ? 'bg-emerald-500 text-[#03120b]'
+                      : isCurrent
+                      ? 'bg-[#4fe3d4] text-[#041022]'
+                      : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {isCompleted ? '✓' : item.num}
+                </span>
+                <span className="truncate">{item.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Conditional Stage Views */}
+      {activeStage === 2 ? (
+        <RocketAssemblyStage
+          initialInstalledParts={level1Progress.rocketParts}
+          onProgressChange={(parts) => {
+            const nextProgress: Level1Progress = {
+              ...progressRef.current,
+              rocketParts: parts,
+            };
+            setLevel1Progress(nextProgress);
+            onSaveProgress(nextProgress);
+          }}
+          onCompleteStage2={(parts) => {
+            const nextProgress: Level1Progress = {
+              ...progressRef.current,
+              stage: 3,
+              rocketParts: parts,
+              stage1Done: true,
+              stage2Done: true,
+            };
+            setLevel1Progress(nextProgress);
+            onSaveProgress(nextProgress);
+          }}
+        />
+      ) : activeStage === 3 || activeStage === 4 || activeStage === 5 ? (
+        <LaunchpadPayloadStage
+          mode={activeStage === 3 ? 'stage3' : activeStage === 4 ? 'stage4' : 'stage5'}
+          starCredits={starCredits}
+          alreadyCompleted={alreadyCompleted}
+          onCompleteStage3={() => {
+            const nextProgress: Level1Progress = {
+              ...progressRef.current,
+              stage: 4,
+              stage1Done: true,
+              stage2Done: true,
+              stage3Done: true,
+            };
+            setLevel1Progress(nextProgress);
+            onSaveProgress(nextProgress);
+          }}
+          onCompleteStage4={() => {
+            const nextProgress: Level1Progress = {
+              ...progressRef.current,
+              stage: 5,
+              stage1Done: true,
+              stage2Done: true,
+              stage3Done: true,
+              stage4Done: true,
+              stage5Done: false,
+              launchStatus: 'not_started',
+            };
+            setLevel1Progress(nextProgress);
+            onSaveProgress(nextProgress);
+          }}
+          onLaunchStatusChange={(status) => {
+            const nextProgress: Level1Progress = {
+              ...progressRef.current,
+              stage: 5,
+              stage1Done: true,
+              stage2Done: true,
+              stage3Done: true,
+              stage4Done: true,
+              stage5Done: status === 'completed',
+              launchStatus: status,
+            };
+            setLevel1Progress(nextProgress);
+            onSaveProgress(nextProgress);
+          }}
+          onCompleteAllStages={async () => {
+            const allSat =
+              progressRef.current.satParts.length === SAT_COMPONENTS.length
+                ? progressRef.current.satParts
+                : SAT_COMPONENTS.map((c) => c.id);
+            const allRocket =
+              progressRef.current.rocketParts.length === ROCKET_COMPONENTS.length
+                ? progressRef.current.rocketParts
+                : ROCKET_COMPONENTS.map((c) => c.id);
+            const doneProgress: Level1Progress = {
+              stage: 5,
+              satParts: allSat,
+              rocketParts: allRocket,
+              stage1Done: true,
+              stage2Done: true,
+              stage3Done: true,
+              stage4Done: true,
+              stage5Done: true,
+              launchStatus: 'completed',
+            };
+            setLevel1Progress(doneProgress);
+            return onCompleteMission({
+              installedSatParts: allSat,
+              installedRocketParts: allRocket,
+              stage3LaunchpadDone: true,
+              stage4PayloadDone: true,
+              stage5LaunchDone: true,
+              launchStatus: 'completed',
+            });
+          }}
+          onContinueToLevel2={() => {
+            SFX.stopAllLaunchAudio();
+            onContinueToLevel2();
+          }}
+          onReplayLevel1={() => {
+            SFX.stopAllLaunchAudio();
+            handleFullReplayLevel1();
+          }}
+          onBackToAcademy={() => {
+            SFX.stopAllLaunchAudio();
+            onBackToAcademy();
+          }}
+        />
+      ) : (
+        <>
+
       {/* Dismissible Top Notification Banner (Replaces inline right-panel feedback) */}
       {notification && (
         <div
-          className={`fixed top-[68px] left-1/2 -translate-x-1/2 z-[5400] w-[min(560px,92vw)] rounded-xl border px-4 py-2.5 shadow-[0_14px_34px_rgba(0,0,0,0.78)] flex items-start justify-between gap-3 animate-[popIn_0.2s_ease-out] ${
+          className={`fixed top-[108px] left-1/2 -translate-x-1/2 z-[5400] w-[min(560px,92vw)] rounded-xl border px-4 py-2.5 shadow-[0_14px_34px_rgba(0,0,0,0.78)] flex items-start justify-between gap-3 animate-[popIn_0.2s_ease-out] ${
             notification.type === 'success'
               ? 'bg-[#06241b]/95 border-emerald-400 text-emerald-100'
               : notification.type === 'error'
@@ -1126,12 +1318,12 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
           className="fixed z-[5500] -translate-x-1/2 -translate-y-1/2 pointer-events-none flex flex-col items-center"
         >
           <div
-            className={`relative p-2 rounded-2xl border-2 backdrop-blur-sm shadow-[0_12px_30px_rgba(0,0,0,0.75)] transition-colors ${
+            className={`relative p-2 rounded-2xl border-2 shadow-[0_12px_30px_rgba(0,0,0,0.75)] transition-colors ${
               hoveredPortId
                 ? hoveredPortId === draggedComp.id
                   ? 'bg-emerald-500/25 border-emerald-400'
                   : 'bg-red-500/25 border-red-400'
-                : 'bg-[#081733]/85 border-[#4fe3d4]'
+                : 'bg-[#081733]/92 border-[#4fe3d4]'
             }`}
           >
             <span className="absolute -top-2 -left-2 w-5 h-5 rounded-full bg-[#050d1d] border border-[#4fe3d4] text-[#4fe3d4] font-mono-tech text-[10px] font-extrabold flex items-center justify-center">
@@ -1142,86 +1334,52 @@ export const SatelliteAssemblyLab: React.FC<SatelliteAssemblyLabProps> = ({
         </div>
       )}
 
-      {/* Completion Confetti & Celebration Modal (Fires ONLY at 9/9) */}
-      {showSuccessModal && (
-        <>
-          <ConfettiStarsOverlay />
-          <div className="fixed inset-0 z-[5600] bg-black/82 flex items-center justify-center p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-[#07142b] border border-cyan-400/55 p-6 md:p-7 text-center shadow-[0_24px_64px_rgba(0,0,0,0.9)] animate-[popIn_0.35s_ease-out]">
-              <div className="text-[11px] font-mono-tech font-extrabold uppercase tracking-[2.5px] text-emerald-400">
-                MISSION SUCCESSFUL!
+      {/* Stage 1 Completion Modal (Advances to Stage 2 — NO Star Credits / Badge Awarded Yet!) */}
+      {showStage1SuccessModal && (
+        <div className="fixed inset-0 z-[5600] bg-black/82 flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[#07142b] border border-emerald-400/55 p-6 md:p-7 text-center shadow-[0_24px_64px_rgba(0,0,0,0.9)] animate-[popIn_0.3s_ease-out]">
+            <div className="text-[11px] font-mono-tech font-extrabold uppercase tracking-[2.5px] text-emerald-400">
+              STAGE 1 COMPLETE // 9 / 9 VERIFIED
+            </div>
+            <h3 className="font-display text-xl md:text-2xl font-extrabold text-white mt-1.5">
+              SATELLITE ASSEMBLY SUCCESSFUL!
+            </h3>
+            <p className="text-xs md:text-sm text-slate-300 mt-3 leading-relaxed">
+              Your Earth observation satellite is fully integrated and checked out! Next, assemble the two-stage launch vehicle required to lift it into orbit.
+            </p>
+
+            <div className="my-5 p-3.5 rounded-xl bg-[#0b1b38] border border-cyan-400/30 text-xs text-slate-200 space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Next Operation:</span>
+                <strong className="text-[#4fe3d4]">Stage 2 – Rocket Assembly</strong>
               </div>
-              <h3 className="font-display text-xl md:text-2xl font-extrabold text-amber-300 mt-1">
-                CONGRATULATIONS, ENGINEER!
-              </h3>
-              <p className="text-xs md:text-sm text-slate-200 mt-2.5 leading-relaxed">
-                You have successfully assembled your first satellite! Your attention to detail and engineering skills have helped GALAXY-X complete its first satellite construction mission. You are now officially recognised as a <strong className="text-[#4fe3d4]">Satellite Builder</strong>!
-              </p>
-
-              <div className="my-4 flex justify-center animate-[popIn_0.45s_ease-out]">
-                <SatelliteBuilderBadgeSVG size={152} />
-              </div>
-
-              {/* Rewards Earned Box */}
-              <div className="rounded-xl bg-[#0b1b38] border border-cyan-400/35 p-3.5 mb-5 text-xs space-y-2 text-left">
-                <div className="text-[10px] font-mono-tech font-bold uppercase tracking-widest text-[#4fe3d4] text-center">
-                  REWARDS EARNED
-                </div>
-                <div className="flex justify-between items-center text-slate-200">
-                  <span>⭐ Star Credits Reward:</span>
-                  <strong className="text-amber-300 font-mono-tech">
-                    {rewardOutcome && !rewardOutcome.alreadyRewarded
-                      ? '+1,000 Star Credits (1000 SC)'
-                      : alreadyCompleted
-                      ? 'Already Claimed (+0 SC Replay)'
-                      : '+1,000 Star Credits (1000 SC)'}
-                  </strong>
-                </div>
-                <div className="flex justify-between items-center text-slate-200">
-                  <span>🏅 Achievement Badge:</span>
-                  <strong className="text-[#4fe3d4]">Satellite Builder Badge</strong>
-                </div>
-                <div className="pt-2 border-t border-white/10 flex justify-between items-center">
-                  <span className="text-slate-400">New Star Credit Balance:</span>
-                  <strong className="text-amber-300 font-mono-tech text-sm tabular-nums">
-                    ★ {(rewardOutcome?.newStarBalance ?? starCredits).toLocaleString()} SC
-                  </strong>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2.5">
-                <button
-                  onClick={() => {
-                    SFX.click();
-                    setShowSuccessModal(false);
-                    onContinueToLevel2();
-                  }}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-[#4fe3d4] to-[#0ea5e9] text-[#041022] font-extrabold text-xs md:text-sm tracking-wide uppercase shadow-lg hover:brightness-110 transition cursor-pointer"
-                >
-                  CONTINUE TO LEVEL 2 ▶
-                </button>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    onClick={handleResetAssembly}
-                    className="py-2.5 rounded-xl bg-white/8 hover:bg-white/15 border border-white/15 text-slate-100 font-bold text-xs tracking-wide uppercase transition cursor-pointer"
-                  >
-                    PLAY AGAIN ↺
-                  </button>
-                  <button
-                    onClick={() => {
-                      SFX.click();
-                      setShowSuccessModal(false);
-                      onBackToAcademy();
-                    }}
-                    className="py-2.5 rounded-xl bg-cyan-400/12 hover:bg-cyan-400/22 border border-cyan-400/40 text-[#4fe3d4] font-bold text-xs tracking-wide uppercase transition cursor-pointer"
-                  >
-                    BACK TO ACADEMY
-                  </button>
-                </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Mission Status:</span>
+                <strong className="text-amber-300">Complete All 5 Stages for Rewards</strong>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                SFX.click();
+                setShowStage1SuccessModal(false);
+                const nextProgress: Level1Progress = {
+                  ...progressRef.current,
+                  stage: 2,
+                  satParts: Array.from(installed),
+                  stage1Done: true,
+                };
+                setLevel1Progress(nextProgress);
+                onSaveProgress(nextProgress);
+              }}
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-[#4fe3d4] to-[#0ea5e9] text-[#041022] font-extrabold text-xs md:text-sm tracking-wide uppercase shadow-lg hover:brightness-110 transition cursor-pointer"
+            >
+              CONTINUE TO ROCKET ASSEMBLY ▶
+            </button>
           </div>
+        </div>
+      )}
         </>
       )}
     </div>

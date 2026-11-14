@@ -74,6 +74,65 @@ export interface SatComponentSpec {
   wrongNotes: Record<string, string>;
 }
 
+export type RocketPartId =
+  | 'first_stage_structure'
+  | 'first_stage_tanks'
+  | 'first_stage_engines'
+  | 'interstage'
+  | 'second_stage_body'
+  | 'second_stage_engine'
+  | 'avionics'
+  | 'grid_fins'
+  | 'landing_legs'
+  | 'payload_fairing';
+
+export interface RocketComponentSpec {
+  id: RocketPartId;
+  sequenceStep: number;
+  name: string;
+  shortName: string;
+  targetName: string;
+  anchorPos: { x: number; y: number; z: number };
+  idealYaw: number;
+  idealPitch: number;
+  func: string;
+  massKg: number;
+  telemetryTag: string;
+  correctNote: string;
+  wrongNotes: Record<string, string>;
+}
+
+export type LaunchSequenceStatus =
+  | 'not_started'
+  | 'countdown'
+  | 'ignition'
+  | 'ascent'
+  | 'completed';
+
+export interface Level1Progress {
+  stage: 1 | 2 | 3 | 4 | 5;
+  satParts: SatSubsystemId[];
+  rocketParts: RocketPartId[];
+  stage1Done: boolean;
+  stage2Done: boolean;
+  stage3Done: boolean;
+  stage4Done: boolean;
+  stage5Done: boolean;
+  launchStatus: LaunchSequenceStatus;
+}
+
+export const DEFAULT_LEVEL1_PROGRESS: Level1Progress = {
+  stage: 1,
+  satParts: [],
+  rocketParts: [],
+  stage1Done: false,
+  stage2Done: false,
+  stage3Done: false,
+  stage4Done: false,
+  stage5Done: false,
+  launchStatus: 'not_started',
+};
+
 export interface PlayerTransaction {
   id: string;
   key: string;
@@ -97,6 +156,7 @@ export interface PlayerState {
   starCredits: number;
   badges: string[];
   transactions?: PlayerTransaction[];
+  level1Progress?: Level1Progress;
 }
 
 export const STORAGE_KEY = 'galaxy_x_player_save_v3';
@@ -113,6 +173,7 @@ export const DEFAULT_PLAYER_STATE: PlayerState = {
   starCredits: 0,
   badges: [],
   transactions: [],
+  level1Progress: { ...DEFAULT_LEVEL1_PROGRESS },
 };
 
 export function getSavedUserId(): string {
@@ -135,7 +196,15 @@ export function loadPlayerData(): PlayerState {
   try {
     const raw = localStorage.getItem(`${STORAGE_KEY}:${getSavedUserId()}`);
     if (raw) {
-      return { ...DEFAULT_PLAYER_STATE, ...JSON.parse(raw) };
+      const parsed = JSON.parse(raw) as Partial<PlayerState>;
+      return {
+        ...DEFAULT_PLAYER_STATE,
+        ...parsed,
+        level1Progress: {
+          ...DEFAULT_LEVEL1_PROGRESS,
+          ...(parsed.level1Progress || {}),
+        },
+      };
     }
   } catch {
     // ignore storage errors
@@ -278,33 +347,34 @@ export const CRATES: SupplyCrate[] = [
 export const CAMPAIGN_LEVELS: CampaignLevel[] = [
   {
     lvl: 1,
-    title: 'LEVEL 1 – SATELLITE ASSEMBLY',
+    title: 'LEVEL 1 – SATELLITE & ROCKET ASSEMBLY',
     tag: 'SPACECRAFT ASSEMBLY HANGAR',
-    sector: 'SAH Cleanroom',
+    sector: 'SAH Cleanroom & Pad 39X',
     orbit: 'Earth Observation Orbit',
     briefingStationId: 'sah',
     briefingStationName: 'Spacecraft Assembly Hangar (SAH)',
-    stationRoute: ['SAH Briefing (Press E)', 'Satellite Assembly Lab'],
+    stationRoute: [
+      'SAH Briefing (Press E)',
+      'Stage 1: Satellite Assembly',
+      'Stage 2: Rocket Assembly',
+      'Stage 3: Launchpad Positioning',
+      'Stage 4: Payload Integration',
+      'Stage 5: Rocket Launching',
+    ],
     t: 'Orbit',
     b: 60,
     credB: 6000,
     req: ['t'],
     displayReq: [
-      'Satellite Bus Frame',
-      'Solar Panels',
-      'Battery',
-      'Comms Antenna',
-      'Camera Payload',
-      'Propulsion System',
-      'On-board Computer',
-      'Attitude Control',
-      'Thermal Control',
+      '9-Part Observation Satellite',
+      '10-Part 2-Stage Launch Vehicle',
+      'Launchpad Staging, Payload Fairing & Orbital Launch',
     ],
-    goal: 'Report to the Spacecraft Assembly Hangar (SAH) for your briefing, then assemble all 9 essential satellite subsystems.',
+    goal: 'Report to the Spacecraft Assembly Hangar (SAH), build your 9-part satellite, assemble the 10-part launch vehicle, stage it on the launchpad, seal the satellite inside the payload fairing, and launch the rocket into space.',
     isLab: true,
     rewardText: '★ 1,000 Star Credits + Satellite Builder Badge',
     icon: '🛰️',
-    difficulty: 'Introductory Lab',
+    difficulty: '5-Stage Engineering Lab',
   },
   {
     lvl: 2,
@@ -733,3 +803,206 @@ export const SAT_COMPONENTS: SatComponentSpec[] = [
     },
   },
 ];
+
+// Simplified educational Falcon 9-inspired two-stage orbital launch vehicle configuration
+export const ROCKET_COMPONENTS: RocketComponentSpec[] = [
+  {
+    id: 'first_stage_structure',
+    sequenceStep: 1,
+    name: 'First-Stage Booster Structure',
+    shortName: 'Booster Hull',
+    targetName: 'Lower Booster Core',
+    anchorPos: { x: 0.0, y: -1.45, z: 0.42 },
+    idealYaw: 0.3,
+    idealPitch: 0.06,
+    func: 'Primary cylindrical aluminum-lithium airframe that transfers launch thrust loads from the engines through the first stage.',
+    massKg: 14800,
+    telemetryTag: 'STAGE 1 HULL',
+    correctNote:
+      'Correct placement! The First-Stage Booster Structure is locked onto the strongback assembly spine.',
+    wrongNotes: {
+      first_stage_tanks: 'Incorrect position! Mount the outer booster airframe shell around the lower stage core, not just the internal tank bay.',
+      first_stage_engines: 'Incorrect position! The booster structure sits above the aft thrust mount, while engine bells attach at the bottom.',
+      interstage: 'Incorrect position! The lower booster hull spans the main lower section beneath the carbon interstage collar.',
+      second_stage_body: 'Incorrect position! The massive first-stage hull belongs on the lower section, not the smaller upper stage.',
+      payload_fairing: 'Incorrect position! The heavy booster airframe supports the base of the rocket, not the nose cone.',
+    },
+  },
+  {
+    id: 'first_stage_tanks',
+    sequenceStep: 2,
+    name: 'First-Stage Propellant Tanks',
+    shortName: 'Stage 1 Tanks',
+    targetName: 'Lower Cryo Tank Bay',
+    anchorPos: { x: 0.0, y: -2.05, z: 0.0 },
+    idealYaw: 0.35,
+    idealPitch: 0.05,
+    func: 'Stores supercooled liquid oxygen and rocket-grade kerosene fuel for the nine first-stage main engines.',
+    massKg: 6400,
+    telemetryTag: 'LOX / RP-1 BAY',
+    correctNote:
+      'Correct placement! Dual first-stage LOX and kerosene propellant tanks are secured inside the booster bay.',
+    wrongNotes: {
+      first_stage_engines: 'Incorrect position! Internal propellant tanks mount inside the lower booster bay above the engine manifold.',
+      second_stage_body: 'Incorrect position! First-stage propellant tanks belong in the lower booster section, not in the upper second stage.',
+      payload_fairing: 'Incorrect position! The nose cone houses spacecraft payload, never main booster fuel tanks.',
+    },
+  },
+  {
+    id: 'first_stage_engines',
+    sequenceStep: 3,
+    name: 'First-Stage Engine Cluster',
+    shortName: '9-Engine Cluster',
+    targetName: 'Aft Octaweb Mount',
+    anchorPos: { x: 0.0, y: -3.28, z: 0.0 },
+    idealYaw: 0.3,
+    idealPitch: 0.14,
+    func: 'Nine sea-level rocket engine bells arranged in an octagonal cluster to lift the launch vehicle off the pad.',
+    massKg: 4200,
+    telemetryTag: '9x LIFTOFF THRUST',
+    correctNote:
+      'Correct placement! The 9-engine cluster and Octaweb heat shield are bolted cleanly to the base of the first stage.',
+    wrongNotes: {
+      interstage: 'Incorrect position! Liftoff engines must exhaust downward from the very bottom of the first stage.',
+      second_stage_engine: 'Incorrect position! The upper interstage houses the single vacuum nozzle; the 9-engine cluster bolts to the bottom aft bulkhead.',
+      payload_fairing: 'Incorrect position! Mounting engines at the nose cone would fire downward into the rocket body.',
+    },
+  },
+  {
+    id: 'interstage',
+    sequenceStep: 4,
+    name: 'Interstage',
+    shortName: 'Interstage',
+    targetName: 'Stage 1–2 Junction',
+    anchorPos: { x: 0.0, y: 0.56, z: 0.0 },
+    idealYaw: 0.35,
+    idealPitch: 0.04,
+    func: 'Hollow carbon-composite cylinder connecting the first and second stages and shielding the upper-stage engine until separation.',
+    massKg: 1100,
+    telemetryTag: 'STAGE SEP RING',
+    correctNote:
+      'Correct placement! The carbon-composite Interstage bridges the first and second stages with pneumatic pushers.',
+    wrongNotes: {
+      first_stage_engines: 'Incorrect position! The interstage joins the top of Stage 1 to Stage 2 in the middle of the rocket.',
+      second_stage_body: 'Incorrect position! Place the black interstage collar at the junction just below the second stage.',
+      payload_fairing: 'Incorrect position! The interstage belongs between stages in the middle, not on top as a nose fairing.',
+    },
+  },
+  {
+    id: 'second_stage_engine',
+    sequenceStep: 5,
+    name: 'Second-Stage Vacuum Engine',
+    shortName: 'Vacuum Engine',
+    targetName: 'Interstage Vacuum Bay',
+    anchorPos: { x: 0.0, y: 0.68, z: 0.44 },
+    idealYaw: 0.1,
+    idealPitch: 0.05,
+    func: 'Single wide-bell engine optimized for near-vacuum flight to push the satellite all the way into target orbit.',
+    massKg: 750,
+    telemetryTag: 'VACUUM NOZZLE',
+    correctNote:
+      'Correct placement! The Second-Stage Vacuum Engine is suspended inside the interstage cavity ready for stage separation.',
+    wrongNotes: {
+      first_stage_engines: 'Incorrect position! The wide vacuum bell nozzle operates on the second stage above the interstage, not on the sea-level aft pad mount.',
+      avionics: 'Incorrect position! The vacuum engine bell mounts under the second-stage tank bulkhead, not in the forward avionics ring.',
+      payload_fairing: 'Incorrect position! Exhaust nozzles never mount inside the satellite payload fairing.',
+    },
+  },
+  {
+    id: 'second_stage_body',
+    sequenceStep: 6,
+    name: 'Second-Stage Structure & Propellant Tanks',
+    shortName: 'Stage 2 Body',
+    targetName: 'Upper Stage Section',
+    anchorPos: { x: 0.0, y: 1.56, z: 0.0 },
+    idealYaw: 0.3,
+    idealPitch: 0.02,
+    func: 'Upper rocket stage airframe and pressurized propellant tanks that carry the payload after first-stage separation.',
+    massKg: 4100,
+    telemetryTag: 'STAGE 2 TANKS',
+    correctNote:
+      'Correct placement! The Second-Stage Structure and Propellant Tanks are stacked directly onto the interstage collar.',
+    wrongNotes: {
+      first_stage_structure: 'Incorrect position! The upper second-stage section stacks above the middle interstage, not down on the lower booster.',
+      first_stage_tanks: 'Incorrect position! That lower bay holds first-stage booster tanks; mount the second stage above the interstage.',
+      payload_fairing: 'Incorrect position! The second-stage propellant section sits directly below the fairing, not at the pointed tip.',
+    },
+  },
+  {
+    id: 'avionics',
+    sequenceStep: 7,
+    name: 'Flight Computer / Avionics',
+    shortName: 'Flight Avionics',
+    targetName: 'Upper Guidance Ring',
+    anchorPos: { x: 0.0, y: 2.26, z: 0.38 },
+    idealYaw: 0.12,
+    idealPitch: -0.05,
+    func: 'Triple-redundant guidance computer, inertial navigation unit, and flight telemetry controller guiding ascent.',
+    massKg: 140,
+    telemetryTag: 'GNC AVIONICS',
+    correctNote:
+      'Correct placement! Flight Computer and inertial guidance avionics are integrated into the upper guidance collar.',
+    wrongNotes: {
+      first_stage_engines: 'Incorrect position! Sensitive guidance computers must be mounted in the upper avionics ring away from engine exhaust heat.',
+      landing_legs: 'Incorrect position! Avionics mount cleanly inside the upper guidance collar near the payload adapter.',
+    },
+  },
+  {
+    id: 'grid_fins',
+    sequenceStep: 8,
+    name: 'Grid Fins',
+    shortName: 'Grid Fins',
+    targetName: 'Upper Booster Collar',
+    anchorPos: { x: -0.58, y: 0.12, z: 0.0 },
+    idealYaw: 0.45,
+    idealPitch: 0.08,
+    func: 'Deployable titanium lattice aerodynamic fins mounted near the top of the first stage to steer the booster during atmospheric reentry.',
+    massKg: 320,
+    telemetryTag: 'REENTRY STEERING',
+    correctNote:
+      'Correct placement! Four titanium Grid Fins are hinged around the upper collar of the first-stage booster.',
+    wrongNotes: {
+      landing_legs: 'Incorrect position! Grid fins belong near the TOP of the first stage for aerodynamic steering, while landing legs mount at the bottom.',
+      payload_fairing: 'Incorrect position! Grid fins steer the returning booster stage, not the orbital nose fairing.',
+    },
+  },
+  {
+    id: 'landing_legs',
+    sequenceStep: 9,
+    name: 'Landing Legs',
+    shortName: 'Landing Legs',
+    targetName: 'Lower Booster Flanks',
+    anchorPos: { x: 0.58, y: -2.45, z: 0.0 },
+    idealYaw: -0.4,
+    idealPitch: 0.12,
+    func: 'Four folded carbon-fiber telescopic legs around the base of the first stage that deploy right before vertical booster touchdown.',
+    massKg: 1850,
+    telemetryTag: 'RECOVERY GEAR',
+    correctNote:
+      'Correct placement! Four stowed Landing Legs are locked along the lower flanks of the first-stage booster.',
+    wrongNotes: {
+      grid_fins: 'Incorrect position! Landing legs must mount at the BOTTOM flanks of the booster to support touchdown, not at the upper collar.',
+      second_stage_body: 'Incorrect position! Only the reusable first-stage booster carries landing legs; the second stage stays in space.',
+    },
+  },
+  {
+    id: 'payload_fairing',
+    sequenceStep: 10,
+    name: 'Payload Fairing / Nose Cone',
+    shortName: 'Nose Fairing',
+    targetName: 'Top Nose Fairing Mount',
+    anchorPos: { x: 0.0, y: 3.15, z: 0.0 },
+    idealYaw: 0.35,
+    idealPitch: -0.08,
+    func: 'Aerodynamic split clamshell nose cone that shields the satellite from air drag, acoustic vibration, and atmospheric heating during liftoff.',
+    massKg: 1900,
+    telemetryTag: 'CLAMSHELL FAIRING',
+    correctNote:
+      'Correct placement! The split clamshell Payload Fairing / Nose Cone caps the second stage, ready for satellite payload integration.',
+    wrongNotes: {
+      first_stage_engines: 'Incorrect position! The aerodynamic nose cone caps the very top of the rocket, not the bottom aft engines.',
+      interstage: 'Incorrect position! Place the clamshell nose fairing at the very top above the second stage and avionics ring.',
+    },
+  },
+];
+

@@ -448,12 +448,12 @@ export const SpaceCampaignMap: React.FC<SpaceCampaignMapProps> = ({
               )}
               <h3 className="font-display text-base font-extrabold text-white mt-1">
                 {selectedLevel.isLab
-                  ? 'LEVEL 1 – SATELLITE ASSEMBLY'
+                  ? 'LEVEL 1 – SATELLITE & ROCKET ASSEMBLY'
                   : `LEVEL ${selectedLevel.lvl} – ${selectedLevel.title.toUpperCase()}`}
               </h3>
               <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
                 {selectedLevel.isLab
-                  ? 'Build your first satellite by assembling its essential components.'
+                  ? 'Build a 9-part satellite, assemble a 10-part launch vehicle, stage it on the launchpad, and load the satellite inside the fairing.'
                   : selectedLevel.goal}
               </p>
             </div>
@@ -479,9 +479,9 @@ export const SpaceCampaignMap: React.FC<SpaceCampaignMapProps> = ({
               <div className="p-3 rounded-xl bg-[#09162d] border border-white/10 text-xs text-slate-300 space-y-2">
                 <div>
                   <strong className="text-[#4fe3d4] block text-[11px] uppercase tracking-wider mb-0.5">
-                    Simple Rules
+                    5-Stage Mission Rules
                   </strong>
-                  Report to the Spacecraft Assembly Hangar (SAH), press E for briefing, then drag all 9 components onto positions 1–9 on the 3D satellite.
+                  Report to Spacecraft Assembly Hangar (SAH), press E for briefing, then complete Stage 1 (Satellite), Stage 2 (Rocket), Stage 3 (Launchpad), Stage 4 (Payload Fairing), and Stage 5 (Rocket Launch) to earn rewards.
                 </div>
                 <div className="pt-2 border-t border-white/10 flex justify-between text-[11px]">
                   <span className="text-slate-400">Reward:</span>
