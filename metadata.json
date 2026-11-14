@@ -1,0 +1,6 @@
+{
+  "name": "SPACEVERSE: GALAXY-X",
+  "description": "Interactive 3D aerospace mission engineering simulation and satellite assembly lab set inside the GALAXY-X Space Research Facility.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
